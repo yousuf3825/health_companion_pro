@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
@@ -16,7 +17,7 @@ class RoleSelectionScreen extends StatelessWidget {
               const SizedBox(height: 60),
               // Header
               Text(
-                'Who are you?',
+                'Join MedConnect Pro',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.primary,
@@ -24,7 +25,7 @@ class RoleSelectionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Select your role to continue',
+                'Are you a healthcare professional?',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
@@ -36,8 +37,8 @@ class RoleSelectionScreen extends StatelessWidget {
                 subtitle: 'Manage consultations & prescriptions',
                 icon: Icons.medical_services,
                 onTap: () {
-                  AppState.setRole(UserRole.doctor);
-                  Navigator.pushNamed(context, '/registration');
+                  Provider.of<AppState>(context, listen: false).setRole(UserRole.doctor);
+                  Navigator.pushNamed(context, '/signup');
                 },
               ),
               const SizedBox(height: 24),
@@ -47,10 +48,40 @@ class RoleSelectionScreen extends StatelessWidget {
                 subtitle: 'Handle prescriptions & medicine inventory',
                 icon: Icons.local_pharmacy,
                 onTap: () {
-                  AppState.setRole(UserRole.pharmacy);
-                  Navigator.pushNamed(context, '/registration');
+                  Provider.of<AppState>(context, listen: false).setRole(UserRole.pharmacy);
+                  Navigator.pushNamed(context, '/signup');
                 },
               ),
+              
+              const SizedBox(height: 32),
+              
+              // Already have an account section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Already have an account? ',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 16,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushReplacementNamed(context, '/signin');
+                    },
+                    child: Text(
+                      'Sign In',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
               const Spacer(flex: 2),
             ],
           ),

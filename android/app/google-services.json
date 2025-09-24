@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "649547460716",
+    "project_id": "telecom-sih",
+    "storage_bucket": "telecom-sih.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:649547460716:android:37cb26a2678ade2bc56849",
+        "android_client_info": {
+          "package_name": "com.sih.telecom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB125eXti6c8VwuaSYprM_c8UyNX1ljJXA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

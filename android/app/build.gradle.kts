@@ -3,10 +3,12 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Add Google services plugin
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.health_companion_pro"
+    namespace = "com.sih.telecom"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,14 +22,16 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.health_companion_pro"
+        // Updated Application ID to match Firebase project
+        applicationId = "com.sih.telecom"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Enable multidex for Firebase
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -41,4 +45,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Firebase and other dependencies
+dependencies {
+    implementation("androidx.multidex:multidex:2.0.1")
 }

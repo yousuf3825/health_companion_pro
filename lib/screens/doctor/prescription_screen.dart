@@ -454,7 +454,7 @@ class _AddMedicineDialogState extends State<_AddMedicineDialog> {
 
             // Medicine Selection
             DropdownButtonFormField<String>(
-              value: _selectedMedicine,
+              initialValue: _selectedMedicine,
               decoration: const InputDecoration(
                 labelText: 'Medicine Name',
                 border: OutlineInputBorder(),

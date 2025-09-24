@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/app_state.dart';
+import '../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -24,11 +26,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDoctor = AppState.currentRole == UserRole.doctor;
-    final userName =
-        isDoctor
-            ? AppState.currentUserName ?? 'Doctor'
-            : AppState.currentPharmacyName ?? 'Pharmacy';
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        final isDoctor = appState.currentRole == UserRole.doctor;
+        final userName =
+            isDoctor
+                ? appState.currentUserName ?? 'Doctor'
+                : appState.currentPharmacyName ?? 'Pharmacy';
 
     return Scaffold(
       appBar: AppBar(
@@ -129,11 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           subtitle: 'Update your personal information',
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Edit profile functionality'),
-                              ),
-                            );
+                            Navigator.pushNamed(context, '/profile');
                           },
                         ),
                         const Divider(height: 1),
@@ -386,6 +386,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+      }
+    );
   }
 
   void _showLanguageDialog() {
@@ -452,24 +454,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                // Reset app state
-                AppState.reset();
+              onPressed: () async {
+                try {
+                  // Show loading
+                  Navigator.of(context).pop(); // Close dialog
+                  
+                  // Show loading dialog
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) => const AlertDialog(
+                      content: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(width: 16),
+                          Text('Logging out...'),
+                        ],
+                      ),
+                    ),
+                  );
 
-                // Close dialog and navigate to login
-                Navigator.of(context).pop();
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/login',
-                  (route) => false,
-                );
+                  // Sign out from Firebase and reset app state
+                  await AuthService.signOut();
+                  if (mounted) {
+                    Provider.of<AppState>(context, listen: false).reset();
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Logged out successfully'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                    // Close loading dialog and navigate to role selection
+                    Navigator.of(context).pop();
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/role-selection',
+                      (route) => false,
+                    );
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Logged out successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  // Close loading dialog if open
+                  if (Navigator.canPop(context)) {
+                    Navigator.of(context).pop();
+                  }
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Logout failed: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

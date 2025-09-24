@@ -142,7 +142,7 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
                                   }
                                 });
                               },
-                              activeColor:
+                              activeThumbColor:
                                   Theme.of(context).colorScheme.primary,
                             ),
                           ],

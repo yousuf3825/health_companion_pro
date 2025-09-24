@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/app_state.dart';
+import '../services/auth_service.dart';
 
 class RegistrationVerificationScreen extends StatefulWidget {
   const RegistrationVerificationScreen({super.key});
@@ -15,7 +18,9 @@ class _RegistrationVerificationScreenState
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _licenseController = TextEditingController();
+  bool _isLoading = false;
 
   String? _selectedSpecialty;
   String? _selectedQualification;
@@ -33,8 +38,197 @@ class _RegistrationVerificationScreenState
   final List<String> _qualifications = ['MBBS', 'MD', 'MS', 'DM', 'MCh', 'DNB'];
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _licenseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final appState = Provider.of<AppState>(context, listen: false);
+      final isDoctor = appState.currentRole == UserRole.doctor;
+      
+      // Prepare profile data
+      Map<String, dynamic> profileData = {
+        'name': _nameController.text.trim(),
+        'phoneNumber': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+        'licenseNumber': _licenseController.text.trim(),
+        'role': isDoctor ? 'doctor' : 'pharmacy',
+      };
+
+      if (isDoctor) {
+        profileData.addAll({
+          'specialty': _selectedSpecialty ?? 'General Practitioner',
+          'qualification': _selectedQualification ?? 'MBBS',
+          'experience': '5 years',
+          'hospital': 'City General Hospital',
+        });
+      } else {
+        profileData.addAll({
+          'pharmacyName': _nameController.text.trim(),
+          'ownerName': 'Dr. John Smith',
+          'gstNumber': 'GST123456789',
+          'address': '123 Medical Street, City',
+        });
+      }
+
+      // Register with Firebase - use email directly instead of phone conversion
+      String password = _passwordController.text.trim().isEmpty 
+          ? 'medconnect123' // Default password for demo
+          : _passwordController.text.trim();
+
+      // Require email input
+      if (_emailController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a valid email address'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      String email = _emailController.text.trim();
+
+      UserCredential? userCredential;
+      try {
+        userCredential = await AuthService.signUpWithEmailAndPassword(
+          email: email,
+          password: password,
+          role: isDoctor ? 'doctor' : 'pharmacy',
+          profileData: profileData,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'configuration-error' || 
+            (e.code == 'unknown' && e.message?.contains('CONFIGURATION_NOT_FOUND') == true)) {
+          // Use temporary registration as fallback
+          print('Using temporary registration due to Firebase configuration issue');
+          bool success = await AuthService.registerUserTemporary(
+            email: email,
+            password: password,
+            role: isDoctor ? 'doctor' : 'pharmacy',
+            profileData: profileData,
+          );
+          
+          if (success) {
+            // Set user data in app state
+            final appState = Provider.of<AppState>(context, listen: false);
+            appState.setUserId(DateTime.now().millisecondsSinceEpoch.toString());
+            if (isDoctor) {
+              appState.setUserName(_nameController.text.trim());
+            } else {
+              appState.setPharmacyName(_nameController.text.trim());
+            }
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Registration successful! (Temporary mode - Please configure Firebase SHA-1)'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+
+              Navigator.pushReplacementNamed(context, '/login');
+            }
+            return;
+          }
+        }
+        throw e; // Re-throw other Firebase errors
+      }
+
+      if (userCredential != null && userCredential.user != null) {
+        // Set user data in app state
+        appState.setUserId(userCredential.user!.uid);
+        if (isDoctor) {
+          appState.setUserName(_nameController.text.trim());
+        } else {
+          appState.setPharmacyName(_nameController.text.trim());
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Registration successful! You can now login.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          Navigator.pushReplacementNamed(context, '/login');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Registration failed';
+      
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage = 'This email is already registered';
+          break;
+        case 'weak-password':
+          errorMessage = 'Password is too weak';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email format';
+          break;
+        case 'configuration-error':
+          errorMessage = 'Firebase not properly configured. Please add SHA-1: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
+          break;
+        case 'unknown':
+          if (e.message?.contains('CONFIGURATION_NOT_FOUND') == true) {
+            errorMessage = 'Firebase configuration error. Add SHA-1 fingerprint to Firebase Console: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
+          } else {
+            errorMessage = 'Registration failed: ${e.message}';
+          }
+          break;
+        default:
+          errorMessage = 'Registration failed: ${e.message}';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isDoctor = AppState.currentRole == UserRole.doctor;
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        final isDoctor = appState.currentRole == UserRole.doctor;
 
     return Scaffold(
       appBar: AppBar(
@@ -172,9 +366,17 @@ class _RegistrationVerificationScreenState
 
               _CustomTextField(
                 controller: _emailController,
-                label: 'Email',
+                label: 'Email (required)',
                 prefixIcon: Icons.email,
                 keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+
+              _CustomTextField(
+                controller: _passwordController,
+                label: 'Password',
+                prefixIcon: Icons.lock,
+                obscureText: true,
               ),
 
               if (isDoctor) ...[
@@ -252,36 +454,25 @@ class _RegistrationVerificationScreenState
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      // Set user name based on role
-                      if (isDoctor) {
-                        AppState.setUserName(_nameController.text);
-                      } else {
-                        AppState.setPharmacyName(_nameController.text);
-                      }
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Registration submitted for verification',
-                          ),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-
-                      Navigator.pushNamed(context, '/login');
-                    }
-                  },
+                  onPressed: _isLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text(
-                    'Submit for Verification',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Register & Create Account',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
 
@@ -290,6 +481,8 @@ class _RegistrationVerificationScreenState
           ),
         ),
       ),
+    );
+      }
     );
   }
 }
@@ -318,6 +511,7 @@ class _CustomTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final bool readOnly;
   final int maxLines;
+  final bool obscureText;
 
   const _CustomTextField({
     required this.controller,
@@ -326,6 +520,7 @@ class _CustomTextField extends StatelessWidget {
     this.keyboardType,
     this.readOnly = false,
     this.maxLines = 1,
+    this.obscureText = false,
   });
 
   @override
@@ -335,6 +530,7 @@ class _CustomTextField extends StatelessWidget {
       keyboardType: keyboardType,
       readOnly: readOnly,
       maxLines: maxLines,
+      obscureText: obscureText,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(prefixIcon),
@@ -343,7 +539,7 @@ class _CustomTextField extends StatelessWidget {
         fillColor: readOnly ? Colors.grey[100] : null,
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if (!readOnly && (value == null || value.isEmpty)) {
           return 'Please enter $label';
         }
         return null;
@@ -370,7 +566,7 @@ class _CustomDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(prefixIcon),

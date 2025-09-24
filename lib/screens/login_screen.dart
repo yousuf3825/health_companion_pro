@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
+import '../models/app_state.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,9 +13,153 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Use email for login
+      String email = _emailController.text.trim();
+      String password = _passwordController.text.trim();
+
+      UserCredential? userCredential;
+      bool tempLoginSuccess = false;
+
+      try {
+        userCredential = await AuthService.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found' || 
+            e.code == 'unknown' || 
+            e.message?.contains('CONFIGURATION_NOT_FOUND') == true) {
+          // Try temporary login as fallback
+          tempLoginSuccess = await AuthService.loginUserTemporary(
+            email: email,
+            password: password,
+          );
+          
+          if (!tempLoginSuccess) {
+            throw e; // Re-throw the original error if temp login also fails
+          }
+        } else {
+          throw e; // Re-throw other Firebase errors
+        }
+      }
+
+      if (userCredential != null && userCredential.user != null) {
+        // Initialize app state for Firebase user
+        final appState = Provider.of<AppState>(context, listen: false);
+        await appState.initializeUser();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login successful!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      } else if (tempLoginSuccess) {
+        // Initialize app state for temporary user
+        final appState = Provider.of<AppState>(context, listen: false);
+        
+        // Load local user data
+        Map<String, String?> localData = await AuthService.loadUserDataLocally();
+        if (localData['userId'] != null) {
+          appState.setUserId(localData['userId']!);
+          if (localData['userName'] != null) {
+            appState.setUserName(localData['userName']!);
+          }
+          if (localData['pharmacyName'] != null) {
+            appState.setPharmacyName(localData['pharmacyName']!);
+          }
+          // Set role based on local data
+          if (localData['userRole'] == 'doctor') {
+            appState.setRole(UserRole.doctor);
+          } else if (localData['userRole'] == 'pharmacy') {
+            appState.setRole(UserRole.pharmacy);
+          }
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login successful! (Temporary mode)'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Login failed';
+      
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'No account found with this email address';
+          break;
+        case 'wrong-password':
+          errorMessage = 'Incorrect password';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email format';
+          break;
+        case 'user-disabled':
+          errorMessage = 'Your account has been disabled';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Too many failed login attempts. Try again later';
+          break;
+        default:
+          errorMessage = 'Login failed: ${e.message}';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,24 +217,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        // Phone Number Field
+                        // Email Field
                         TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
-                            labelText: 'Phone Number',
-                            prefixIcon: const Icon(Icons.phone),
+                            labelText: 'Email',
+                            prefixIcon: const Icon(Icons.email),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            hintText: '+91 XXXXX XXXXX',
+                            hintText: 'your.email@example.com',
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter your phone number';
+                              return 'Please enter your email';
                             }
-                            if (value.length < 10) {
-                              return 'Please enter a valid phone number';
+                            if (!value.contains('@')) {
+                              return 'Please enter a valid email address';
                             }
                             return null;
                           },
@@ -150,33 +298,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Login successful'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                                Navigator.pushReplacementNamed(
-                                  context,
-                                  '/dashboard',
-                                );
-                              }
-                            },
+                            onPressed: _isLoading ? null : _login,
                             style: ElevatedButton.styleFrom(
                               backgroundColor:
                                   Theme.of(context).colorScheme.primary,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                             ),
-                            child: const Text(
-                              'Login',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Login',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
 

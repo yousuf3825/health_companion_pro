@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../models/app_state.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,13 +14,40 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToRoleSelection();
+    _initializeApp();
   }
 
-  _navigateToRoleSelection() async {
-    await Future.delayed(const Duration(seconds: 3));
+  Future<void> _initializeApp() async {
+    await Future.delayed(const Duration(seconds: 2));
+    
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/role-selection');
+      // Check if user is already authenticated
+      if (AuthService.isSignedIn) {
+        // User is signed in, initialize app state and go to dashboard
+        final appState = Provider.of<AppState>(context, listen: false);
+        await appState.initializeUser();
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else {
+        // Check for local user data
+        Map<String, String?> localData = await AuthService.loadUserDataLocally();
+        
+        if (localData.isNotEmpty && localData['userId'] != null) {
+          // Set app state from local data and go to dashboard
+          final appState = Provider.of<AppState>(context, listen: false);
+          appState.setUserId(localData['userId']!);
+          appState.setRole(localData['userRole'] == 'doctor' ? UserRole.doctor : UserRole.pharmacy);
+          if (localData['userName'] != null) {
+            appState.setUserName(localData['userName']!);
+          }
+          if (localData['pharmacyName'] != null) {
+            appState.setPharmacyName(localData['pharmacyName']!);
+          }
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        } else {
+          // No user data, go to sign-in page
+          Navigator.pushReplacementNamed(context, '/signin');
+        }
+      }
     }
   }
 
@@ -45,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ],
               ),
               child: const Icon(
-                Icons.health_and_safety,
+                Icons.medical_services,
                 size: 60,
                 color: Color(0xFF2E7D32),
               ),
@@ -53,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 32),
             // App Name
             Text(
-              'SehatLink Pro',
+              'MedConnect Pro',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
@@ -63,7 +93,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Doctor & Pharmacy Management',
+              'Connecting Doctors & Pharmacists',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.white.withOpacity(0.9),
