@@ -429,13 +429,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
-      applicationName: 'SehatLink Pro',
+      applicationName: 'MedConnect Pro',
       applicationVersion: '1.0.0',
-      applicationLegalese: '© 2024 SehatLink Pro. All rights reserved.',
+      applicationLegalese: '© 2024 MedConnect Pro. All rights reserved.',
       children: [
         const SizedBox(height: 16),
         const Text(
-          'SehatLink Pro is a comprehensive healthcare management platform designed to connect doctors, pharmacies, and patients for seamless healthcare delivery.',
+          'MedConnect Pro is a comprehensive healthcare management platform designed to connect doctors, pharmacies, and patients for seamless healthcare delivery.',
         ),
       ],
     );

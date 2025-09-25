@@ -1,10 +1,10 @@
-# SehatLink Pro
+# MedConnect Pro
 
 A comprehensive Flutter application designed for healthcare professionals including Doctors and Pharmacies to manage consultations, prescriptions, and medicine requests. This is a static frontend application built specifically for Android platforms.
 
 ## Overview
 
-SehatLink Pro bridges the gap between healthcare providers by offering a unified platform for:
+MedConnect Pro bridges the gap between healthcare providers by offering a unified platform for:
 - **Doctors**: Manage patient consultations, create prescriptions, schedule appointments, and track medical history
 - **Pharmacies**: Handle prescription fulfillment, medicine inventory, and patient medicine requests
 
@@ -80,7 +80,7 @@ lib/
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd health_companion_pro
+   cd medconnect_pro
    ```
 
 2. **Install dependencies**:

@@ -7,7 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:health_companion_pro/screens/role_selection_screen.dart';
+import 'package:medconnect_pro/screens/role_selection_screen.dart';
 
 void main() {
   testWidgets('Role selection screen displays correctly', (
