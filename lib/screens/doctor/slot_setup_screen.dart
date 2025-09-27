@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SlotSetupScreen extends StatefulWidget {
   const SlotSetupScreen({super.key});
@@ -8,6 +10,10 @@ class SlotSetupScreen extends StatefulWidget {
 }
 
 class _SlotSetupScreenState extends State<SlotSetupScreen> {
+  // Loading/error state
+  bool _loading = true;
+  String? _loadError;
+
   final List<DayAvailability> _availableSlots = [
     DayAvailability(
       day: 'Monday',
@@ -52,6 +58,179 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
       endTime: '',
     ),
   ];
+  // Days order for consistent UI and mapping
+  static const List<String> _daysOrder = <String>[
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWorkingHours();
+  }
+
+  // Convert 'HH:mm' -> 'h:mm AM/PM'
+  String _to12Hour(String hhmm) {
+    if (hhmm.isEmpty) return '';
+    try {
+      final parts = hhmm.split(':');
+      int h = int.parse(parts[0]);
+      int m = int.parse(parts[1]);
+      final period = h >= 12 ? 'PM' : 'AM';
+      h = h % 12;
+      if (h == 0) h = 12;
+      final mm = m.toString().padLeft(2, '0');
+      return '$h:$mm $period';
+    } catch (_) {
+      return hhmm; // fallback
+    }
+  }
+
+  // Convert 'h:mm AM/PM' -> 'HH:mm'
+  String _to24Hour(String display) {
+    if (display.isEmpty) return '';
+    try {
+      final parts = display.split(' ');
+      final hm = parts[0].split(':');
+      int h = int.parse(hm[0]);
+      final m = int.parse(hm[1]);
+      final period = parts.length > 1 ? parts[1].toUpperCase() : 'AM';
+      if (period == 'PM' && h < 12) h += 12;
+      if (period == 'AM' && h == 12) h = 0;
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return display; // fallback
+    }
+  }
+
+  String _dayKeyFromName(String name) => name.toLowerCase();
+
+  Future<void> _fetchWorkingHours() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('No user signed in');
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('doctors')
+          .doc(user.uid)
+          .get();
+
+      if (!doc.exists) {
+        // Nothing in Firestore yet; leave defaults
+        setState(() => _loading = false);
+        return;
+      }
+
+  final data = doc.data();
+      final working = (data?['workingHours'] ?? {}) as Map<String, dynamic>;
+
+      // Build from Firestore into our display list (convert to 12h)
+      final Map<String, DayAvailability> byDay = {
+        for (final d in _availableSlots) d.day: d,
+      };
+
+      for (final dayName in _daysOrder) {
+        final key = _dayKeyFromName(dayName);
+        final entry = (working[key] ?? {}) as Map<String, dynamic>;
+        final isAvail = entry['isAvailable'] == true;
+        final start24 = (entry['startTime'] ?? '') as String;
+        final end24 = (entry['endTime'] ?? '') as String;
+        final startDisp = start24.isNotEmpty ? _to12Hour(start24) : '';
+        final endDisp = end24.isNotEmpty ? _to12Hour(end24) : '';
+
+        final existing = byDay[dayName];
+        if (existing != null) {
+          existing.isAvailable = isAvail;
+          existing.startTime = startDisp.isNotEmpty ? startDisp : existing.startTime;
+          existing.endTime = endDisp.isNotEmpty ? endDisp : existing.endTime;
+        }
+      }
+
+      setState(() => _loading = false);
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _loadError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _saveSchedule() async {
+    // Validate that available days have both start and end times
+    bool isValid = true;
+    for (var day in _availableSlots) {
+      if (day.isAvailable && (day.startTime.isEmpty || day.endTime.isEmpty)) {
+        isValid = false;
+        break;
+      }
+    }
+
+    if (!isValid) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please set both start and end times for available days'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('No user signed in');
+
+      // Build Firestore payload in 24h format
+      final Map<String, dynamic> working = {};
+      for (final day in _availableSlots) {
+        final key = _dayKeyFromName(day.day);
+        working[key] = {
+          'isAvailable': day.isAvailable,
+          'startTime': day.isAvailable ? _to24Hour(day.startTime) : '',
+          'endTime': day.isAvailable ? _to24Hour(day.endTime) : '',
+        };
+      }
+
+      await FirebaseFirestore.instance
+          .collection('doctors')
+          .doc(user.uid)
+          .set(
+        {
+          'workingHours': working,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Availability schedule saved successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving schedule: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   final List<String> _timeOptions = [
     '8:00 AM',
@@ -106,7 +285,17 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
 
           // Days List
           Expanded(
-            child: ListView.builder(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : (_loadError != null
+                    ? Center(
+                        child: Text(
+                          'Error loading schedule:\n$_loadError',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      )
+                    : ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _availableSlots.length,
               itemBuilder: (context, index) {
@@ -361,7 +550,7 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
                   ),
                 );
               },
-            ),
+            )),
           ),
 
           // Save Button
@@ -369,36 +558,7 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             child: ElevatedButton(
-              onPressed: () {
-                // Validate that available days have both start and end times
-                bool isValid = true;
-                for (var day in _availableSlots) {
-                  if (day.isAvailable &&
-                      (day.startTime.isEmpty || day.endTime.isEmpty)) {
-                    isValid = false;
-                    break;
-                  }
-                }
-
-                if (!isValid) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Please set both start and end times for available days',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Availability schedule saved successfully'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              },
+              onPressed: _saveSchedule,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Colors.white,
