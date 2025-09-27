@@ -133,7 +133,7 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
         return;
       }
 
-  final data = doc.data();
+      final data = doc.data();
       final working = (data?['workingHours'] ?? {}) as Map<String, dynamic>;
 
       // Build from Firestore into our display list (convert to 12h)
@@ -153,7 +153,9 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
         final existing = byDay[dayName];
         if (existing != null) {
           existing.isAvailable = isAvail;
-          existing.startTime = startDisp.isNotEmpty ? startDisp : existing.startTime;
+          existing.startTime = startDisp.isNotEmpty
+              ? startDisp
+              : existing.startTime;
           existing.endTime = endDisp.isNotEmpty ? endDisp : existing.endTime;
         }
       }
@@ -181,7 +183,9 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please set both start and end times for available days'),
+          content: Text(
+            'Please set both start and end times for available days',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -203,16 +207,10 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
         };
       }
 
-      await FirebaseFirestore.instance
-          .collection('doctors')
-          .doc(user.uid)
-          .set(
-        {
-          'workingHours': working,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await FirebaseFirestore.instance.collection('doctors').doc(user.uid).set({
+        'workingHours': working,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -288,269 +286,321 @@ class _SlotSetupScreenState extends State<SlotSetupScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : (_loadError != null
-                    ? Center(
-                        child: Text(
-                          'Error loading schedule:\n$_loadError',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      )
-                    : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _availableSlots.length,
-              itemBuilder: (context, index) {
-                final daySlot = _availableSlots[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              daySlot.day,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                            Switch(
-                              value: daySlot.isAvailable,
-                              onChanged: (bool value) {
-                                setState(() {
-                                  daySlot.isAvailable = value;
-                                  if (!value) {
-                                    daySlot.startTime = '';
-                                    daySlot.endTime = '';
-                                  } else if (daySlot.startTime.isEmpty) {
-                                    daySlot.startTime = '9:00 AM';
-                                    daySlot.endTime = '5:00 PM';
-                                  }
-                                });
-                              },
-                              activeThumbColor:
-                                  Theme.of(context).colorScheme.primary,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        if (daySlot.isAvailable) ...[
-                          // Available Hours Display
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.schedule,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 32,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Available Hours',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${daySlot.startTime} - ${daySlot.endTime}',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
+                      ? Center(
+                          child: Text(
+                            'Error loading schedule:\n$_loadError',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red),
                           ),
-                          const SizedBox(height: 16),
-
-                          // Time Selection Row
-                          Row(
-                            children: [
-                              Expanded(
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _availableSlots.length,
+                          itemBuilder: (context, index) {
+                            final daySlot = _availableSlots[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'Start Time',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Colors.grey[300]!,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value:
-                                              daySlot.startTime.isEmpty
-                                                  ? null
-                                                  : daySlot.startTime,
-                                          hint: const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                            ),
-                                            child: Text('Select start time'),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          daySlot.day,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
                                           ),
-                                          isExpanded: true,
-                                          items:
-                                              _timeOptions.map<
-                                                DropdownMenuItem<String>
-                                              >((String value) {
-                                                return DropdownMenuItem<String>(
-                                                  value: value,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                        ),
-                                                    child: Text(value),
-                                                  ),
-                                                );
-                                              }).toList(),
-                                          onChanged: (String? newValue) {
+                                        ),
+                                        Switch(
+                                          value: daySlot.isAvailable,
+                                          onChanged: (bool value) {
                                             setState(() {
-                                              daySlot.startTime =
-                                                  newValue ?? '';
+                                              daySlot.isAvailable = value;
+                                              if (!value) {
+                                                daySlot.startTime = '';
+                                                daySlot.endTime = '';
+                                              } else if (daySlot
+                                                  .startTime
+                                                  .isEmpty) {
+                                                daySlot.startTime = '9:00 AM';
+                                                daySlot.endTime = '5:00 PM';
+                                              }
                                             });
                                           },
+                                          activeThumbColor: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    if (daySlot.isAvailable) ...[
+                                      // Available Hours Display
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primaryContainer
+                                              .withOpacity(0.3),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.3),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              Icons.schedule,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                              size: 32,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Available Hours',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${daySlot.startTime} - ${daySlot.endTime}',
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ),
+                                      const SizedBox(height: 16),
+
+                                      // Time Selection Row
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  'Start Time',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w500,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  width: double.infinity,
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                      color: Colors.grey[300]!,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: DropdownButtonHideUnderline(
+                                                    child: DropdownButton<String>(
+                                                      value:
+                                                          daySlot
+                                                              .startTime
+                                                              .isEmpty
+                                                          ? null
+                                                          : daySlot.startTime,
+                                                      hint: const Padding(
+                                                        padding:
+                                                            EdgeInsets.symmetric(
+                                                              horizontal: 12,
+                                                            ),
+                                                        child: Text(
+                                                          'Select start time',
+                                                        ),
+                                                      ),
+                                                      isExpanded: true,
+                                                      items:
+                                                          _timeOptions.map<
+                                                            DropdownMenuItem<
+                                                              String
+                                                            >
+                                                          >((String value) {
+                                                            return DropdownMenuItem<
+                                                              String
+                                                            >(
+                                                              value: value,
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                    ),
+                                                                child: Text(
+                                                                  value,
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }).toList(),
+                                                      onChanged:
+                                                          (String? newValue) {
+                                                            setState(() {
+                                                              daySlot.startTime =
+                                                                  newValue ??
+                                                                  '';
+                                                            });
+                                                          },
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  'End Time',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w500,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  width: double.infinity,
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                      color: Colors.grey[300]!,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: DropdownButtonHideUnderline(
+                                                    child: DropdownButton<String>(
+                                                      value:
+                                                          daySlot
+                                                              .endTime
+                                                              .isEmpty
+                                                          ? null
+                                                          : daySlot.endTime,
+                                                      hint: const Padding(
+                                                        padding:
+                                                            EdgeInsets.symmetric(
+                                                              horizontal: 12,
+                                                            ),
+                                                        child: Text(
+                                                          'Select end time',
+                                                        ),
+                                                      ),
+                                                      isExpanded: true,
+                                                      items:
+                                                          _timeOptions.map<
+                                                            DropdownMenuItem<
+                                                              String
+                                                            >
+                                                          >((String value) {
+                                                            return DropdownMenuItem<
+                                                              String
+                                                            >(
+                                                              value: value,
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                    ),
+                                                                child: Text(
+                                                                  value,
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }).toList(),
+                                                      onChanged:
+                                                          (String? newValue) {
+                                                            setState(() {
+                                                              daySlot.endTime =
+                                                                  newValue ??
+                                                                  '';
+                                                            });
+                                                          },
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ] else ...[
+                                      // Unavailable Day Display
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[100],
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              Icons.event_busy,
+                                              color: Colors.grey[500],
+                                              size: 32,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Not Available',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'No consultations scheduled',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[500],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'End Time',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Colors.grey[300]!,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value:
-                                              daySlot.endTime.isEmpty
-                                                  ? null
-                                                  : daySlot.endTime,
-                                          hint: const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                            ),
-                                            child: Text('Select end time'),
-                                          ),
-                                          isExpanded: true,
-                                          items:
-                                              _timeOptions.map<
-                                                DropdownMenuItem<String>
-                                              >((String value) {
-                                                return DropdownMenuItem<String>(
-                                                  value: value,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                        ),
-                                                    child: Text(value),
-                                                  ),
-                                                );
-                                              }).toList(),
-                                          onChanged: (String? newValue) {
-                                            setState(() {
-                                              daySlot.endTime = newValue ?? '';
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ] else ...[
-                          // Unavailable Day Display
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.event_busy,
-                                  color: Colors.grey[500],
-                                  size: 32,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Not Available',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'No consultations scheduled',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            )),
+                            );
+                          },
+                        )),
           ),
 
           // Save Button
