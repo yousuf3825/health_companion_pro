@@ -134,7 +134,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Doctor profile saved to /doctors collection successfully!'),
+            content: Text(
+              'Doctor profile saved to /doctors collection successfully!',
+            ),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
