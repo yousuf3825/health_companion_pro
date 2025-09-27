@@ -52,7 +52,9 @@ class AppState extends ChangeNotifier {
 
   void setUserProfile(Map<String, dynamic> profile) {
     _currentUserProfile = profile;
-    _currentRole = profile['role'] == 'doctor' ? UserRole.doctor : UserRole.pharmacy;
+    _currentRole = profile['role'] == 'doctor'
+        ? UserRole.doctor
+        : UserRole.pharmacy;
     _currentUserName = profile['name'];
     if (profile['role'] == 'pharmacy') {
       _currentPharmacyName = profile['pharmacyName'] ?? profile['name'];
@@ -74,22 +76,31 @@ class AppState extends ChangeNotifier {
   Future<void> initializeUser() async {
     setLoading(true);
     setError(null);
-    
+
     try {
       User? user = AuthService.currentUser;
       if (user != null) {
         print('Initializing user from Firebase: ${user.uid}');
         setUserId(user.uid);
-        
+
+        // AUTOMATIC FIREBASE TEST: Run once to diagnose the issue
+        print('🔥 AUTO-TEST: Running Firebase write capability test...');
+        await AuthService.testFirebaseWriteCapability();
+
         // Load user profile
-        Map<String, dynamic>? profile = await AuthService.getUserProfile(user.uid);
+        Map<String, dynamic>? profile = await AuthService.getUserProfile(
+          user.uid,
+        );
         if (profile != null) {
-          print('Profile loaded from Firestore: ${profile['name']} (${profile['role']})');
+          print(
+            'Profile loaded from Firestore: ${profile['name']} (${profile['role']})',
+          );
           setUserProfile(profile);
         } else {
           print('No profile found in Firestore, trying local data');
           // Try to load from local data as fallback
-          Map<String, String?> localData = await AuthService.loadUserDataLocally();
+          Map<String, String?> localData =
+              await AuthService.loadUserDataLocally();
           if (localData['userId'] != null) {
             setUserId(localData['userId']!);
             if (localData['userRole'] == 'doctor') {
@@ -109,7 +120,8 @@ class AppState extends ChangeNotifier {
       } else {
         print('No Firebase user found, trying local data');
         // No Firebase user, try local data
-        Map<String, String?> localData = await AuthService.loadUserDataLocally();
+        Map<String, String?> localData =
+            await AuthService.loadUserDataLocally();
         if (localData['userId'] != null) {
           setUserId(localData['userId']!);
           if (localData['userRole'] == 'doctor') {
@@ -123,16 +135,19 @@ class AppState extends ChangeNotifier {
               setPharmacyName(localData['pharmacyName']!);
             }
           }
-          print('Initialized from local data (no Firebase): ${localData.toString()}');
+          print(
+            'Initialized from local data (no Firebase): ${localData.toString()}',
+          );
         }
       }
     } catch (e) {
       print('Error initializing user: $e');
       setError('Failed to load user data: $e');
-      
+
       // As final fallback, try local data
       try {
-        Map<String, String?> localData = await AuthService.loadUserDataLocally();
+        Map<String, String?> localData =
+            await AuthService.loadUserDataLocally();
         if (localData['userId'] != null) {
           setUserId(localData['userId']!);
           if (localData['userRole'] == 'doctor') {
@@ -160,17 +175,17 @@ class AppState extends ChangeNotifier {
   // Update user profile
   Future<void> updateUserProfile(Map<String, dynamic> updates) async {
     if (_currentUserId == null || _currentRole == null) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       await AuthService.updateUserProfile(
         userId: _currentUserId!,
         role: _currentRole == UserRole.doctor ? 'doctor' : 'pharmacy',
         updates: updates,
       );
-      
+
       // Update local profile
       if (_currentUserProfile != null) {
         _currentUserProfile!.addAll(updates);
@@ -187,7 +202,7 @@ class AppState extends ChangeNotifier {
   Future<void> signOut() async {
     setLoading(true);
     setError(null);
-    
+
     try {
       await AuthService.signOut();
       reset();
@@ -212,10 +227,12 @@ class AppState extends ChangeNotifier {
   // Static methods for backward compatibility
   static UserRole? get staticCurrentRole => _instance._currentRole;
   static String? get staticCurrentUserName => _instance._currentUserName;
-  static String? get staticCurrentPharmacyName => _instance._currentPharmacyName;
+  static String? get staticCurrentPharmacyName =>
+      _instance._currentPharmacyName;
 
   static void staticSetRole(UserRole role) => _instance.setRole(role);
   static void staticSetUserName(String name) => _instance.setUserName(name);
-  static void staticSetPharmacyName(String name) => _instance.setPharmacyName(name);
+  static void staticSetPharmacyName(String name) =>
+      _instance.setPharmacyName(name);
   static void staticReset() => _instance.reset();
 }

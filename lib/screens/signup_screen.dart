@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/auth_service.dart';
+import 'doctor_details_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -19,7 +20,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
@@ -102,14 +103,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       final isDoctor = _selectedRole == UserRole.doctor;
-      
+
       // Prepare profile data
       Map<String, dynamic> profileData = {
         'name': _nameController.text.trim(),
         'phoneNumber': _phoneController.text.trim(),
         'email': _emailController.text.trim(),
         'licenseNumber': _licenseController.text.trim(),
-        'role': isDoctor ? 'doctor' : 'pharmacy',
+        'role': isDoctor ? 'doctor' : 'pharmacy', // Document field (singular)
       };
 
       if (isDoctor) {
@@ -139,32 +140,62 @@ class _SignUpScreenState extends State<SignUpScreen> {
         userCredential = await AuthService.signUpWithEmailAndPassword(
           email: email,
           password: password,
-          role: isDoctor ? 'doctor' : 'pharmacy',
+          role: isDoctor ? 'doctors' : 'pharmacies', // Collection name (plural)
           profileData: profileData,
         );
-        
+
         if (userCredential != null && userCredential.user != null) {
           registrationSuccessful = true;
         }
       } on FirebaseAuthException catch (e) {
         print('Firebase Auth Exception: ${e.code} - ${e.message}');
-        
-        if (e.code == 'configuration-error' || 
+
+        if (e.code == 'configuration-error' ||
             e.code == 'type-error' ||
-            (e.code == 'unknown' && e.message?.contains('CONFIGURATION_NOT_FOUND') == true) ||
+            (e.code == 'unknown' &&
+                e.message?.contains('CONFIGURATION_NOT_FOUND') == true) ||
             e.code.contains('network-request-failed') ||
             e.message?.toLowerCase().contains('pigeonuserdetails') == true) {
           // Use temporary registration as fallback for various Firebase issues
-          print('Using temporary registration due to Firebase issue: ${e.code}');
+          print(
+            'Using temporary registration due to Firebase issue: ${e.code}',
+          );
           tempRegistrationSuccess = await AuthService.registerUserTemporary(
             email: email,
             password: password,
-            role: isDoctor ? 'doctor' : 'pharmacy',
+            role: isDoctor ? 'doctors' : 'pharmacies', // Changed to plural
             profileData: profileData,
           );
-          
+
           if (tempRegistrationSuccess) {
             registrationSuccessful = true;
+
+            // IMPORTANT: Even with temporary registration, try to create Firebase profile
+            // if user was actually created in Firebase Auth
+            try {
+              User? currentUser = FirebaseAuth.instance.currentUser;
+              if (currentUser != null) {
+                print('🔥 User exists in Firebase Auth: ${currentUser.uid}');
+                print(
+                  '🔥 Attempting to create Firebase profile despite type error...',
+                );
+
+                await AuthService.createUserProfile(
+                  userId: currentUser.uid,
+                  role: isDoctor
+                      ? 'doctors'
+                      : 'pharmacies', // Changed to plural
+                  userData: {'email': email, ...profileData},
+                );
+
+                print(
+                  '✅ Firebase profile created successfully despite initial type error!',
+                );
+              }
+            } catch (profileError) {
+              print('❌ Failed to create Firebase profile: $profileError');
+              // Don't fail the registration - at least we have local storage
+            }
           } else {
             throw e;
           }
@@ -178,13 +209,40 @@ class _SignUpScreenState extends State<SignUpScreen> {
           tempRegistrationSuccess = await AuthService.registerUserTemporary(
             email: email,
             password: password,
-            role: isDoctor ? 'doctor' : 'pharmacy',
+            role: isDoctor ? 'doctors' : 'pharmacies', // Changed to plural
             profileData: profileData,
           );
-          
+
           if (tempRegistrationSuccess) {
             registrationSuccessful = true;
             print('Fallback to temporary registration successful');
+
+            // IMPORTANT: Even with temporary registration, try to create Firebase profile
+            // if user was actually created in Firebase Auth
+            try {
+              User? currentUser = FirebaseAuth.instance.currentUser;
+              if (currentUser != null) {
+                print('🔥 User exists in Firebase Auth: ${currentUser.uid}');
+                print(
+                  '🔥 Attempting to create Firebase profile despite type error...',
+                );
+
+                await AuthService.createUserProfile(
+                  userId: currentUser.uid,
+                  role: isDoctor
+                      ? 'doctors'
+                      : 'pharmacies', // Changed to plural
+                  userData: {'email': email, ...profileData},
+                );
+
+                print(
+                  '✅ Firebase profile created successfully despite initial type error!',
+                );
+              }
+            } catch (profileError) {
+              print('❌ Failed to create Firebase profile: $profileError');
+              // Don't fail the registration - at least we have local storage
+            }
           } else {
             throw e;
           }
@@ -198,25 +256,57 @@ class _SignUpScreenState extends State<SignUpScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(tempRegistrationSuccess 
-                ? 'Account created successfully! Please sign in to continue.'
-                : 'Account created successfully! Please sign in to continue.'),
+              content: Text(
+                tempRegistrationSuccess
+                    ? 'Account created successfully! Please complete your profile.'
+                    : 'Account created successfully! Please complete your profile.',
+              ),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 2),
             ),
           );
 
-          // Redirect to sign-in page instead of dashboard
-          Navigator.pushReplacementNamed(
-            context, 
-            '/signin',
-            arguments: {'showSuccess': true},
-          );
+          // For doctors, navigate to profile completion
+          if (isDoctor) {
+            // Get current user for doctor details screen
+            User? currentUser = FirebaseAuth.instance.currentUser;
+            if (currentUser != null) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DoctorDetailsScreen(
+                    userId: currentUser.uid,
+                    basicProfileData: {
+                      'name': _nameController.text.trim(),
+                      'email': _emailController.text.trim(),
+                      'phoneNumber': _phoneController.text.trim(),
+                      'licenseNumber': _licenseController.text.trim(),
+                      'role': 'doctor',
+                    },
+                  ),
+                ),
+              );
+            } else {
+              // Fallback to signin if no current user
+              Navigator.pushReplacementNamed(
+                context,
+                '/signin',
+                arguments: {'showSuccess': true},
+              );
+            }
+          } else {
+            // For pharmacies, go directly to signin (they already have complete profile)
+            Navigator.pushReplacementNamed(
+              context,
+              '/signin',
+              arguments: {'showSuccess': true},
+            );
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
-      
+
       switch (e.code) {
         case 'email-already-in-use':
           errorMessage = 'This email is already registered';
@@ -228,11 +318,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
           errorMessage = 'Invalid email format';
           break;
         case 'configuration-error':
-          errorMessage = 'Firebase not properly configured. Please add SHA-1: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
+          errorMessage =
+              'Firebase not properly configured. Please add SHA-1: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
           break;
         case 'unknown':
           if (e.message?.contains('CONFIGURATION_NOT_FOUND') == true) {
-            errorMessage = 'Firebase configuration error. Add SHA-1 fingerprint to Firebase Console: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
+            errorMessage =
+                'Firebase configuration error. Add SHA-1 fingerprint to Firebase Console: 0E:AF:CF:61:64:AE:74:1D:B2:A6:54:E9:FD:5C:0E:B2:08:A2:63:1B';
           } else {
             errorMessage = 'Registration failed: ${e.message}';
           }
@@ -278,7 +370,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                
+
                 // Header
                 Center(
                   child: Column(
@@ -286,7 +378,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -298,10 +392,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Create Account',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -357,8 +452,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       // Name Field
                       _buildTextField(
                         controller: _nameController,
-                        label: _selectedRole == UserRole.doctor ? 'Full Name' : 'Pharmacy/Owner Name',
-                        hint: 'Enter your ${_selectedRole == UserRole.doctor ? 'full name' : 'pharmacy or owner name'}',
+                        label: _selectedRole == UserRole.doctor
+                            ? 'Full Name'
+                            : 'Pharmacy/Owner Name',
+                        hint:
+                            'Enter your ${_selectedRole == UserRole.doctor ? 'full name' : 'pharmacy or owner name'}',
                         icon: Icons.person_outlined,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -398,7 +496,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your email';
                           }
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                          if (!RegExp(
+                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                          ).hasMatch(value)) {
                             return 'Please enter a valid email address';
                           }
                           return null;
@@ -430,7 +530,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       // License Field
                       _buildTextField(
                         controller: _licenseController,
-                        label: _selectedRole == UserRole.doctor ? 'Medical License' : 'Pharmacy License',
+                        label: _selectedRole == UserRole.doctor
+                            ? 'Medical License'
+                            : 'Pharmacy License',
                         hint: 'Enter your license number',
                         icon: Icons.badge_outlined,
                         validator: (value) {
@@ -518,7 +620,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
                             });
                           },
                         ),
@@ -567,7 +670,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                     TextSpan(
                                       text: 'Terms and Conditions',
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -582,7 +687,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                     TextSpan(
                                       text: 'Privacy Policy',
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -603,14 +710,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _signUp,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                             elevation: 2,
                           ),
-                          child: _isLoading 
+                          child: _isLoading
                               ? const CircularProgressIndicator(
                                   color: Colors.white,
                                   strokeWidth: 2,
@@ -641,8 +750,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           GestureDetector(
                             onTap: () {
                               Navigator.pushNamedAndRemoveUntil(
-                                context, 
-                                '/signin', 
+                                context,
+                                '/signin',
                                 (route) => false,
                               );
                             },
@@ -687,14 +796,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           border: Border.all(
-            color: isSelected 
-                ? Theme.of(context).colorScheme.primary 
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
                 : Colors.grey[300]!,
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
-          color: isSelected 
-              ? Theme.of(context).colorScheme.primary.withOpacity(0.05) 
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
               : Colors.white,
         ),
         child: Column(
@@ -702,8 +811,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             Icon(
               icon,
               size: 40,
-              color: isSelected 
-                  ? Theme.of(context).colorScheme.primary 
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
                   : Colors.grey[600],
             ),
             const SizedBox(height: 12),
@@ -712,17 +821,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
-                color: isSelected 
-                    ? Theme.of(context).colorScheme.primary 
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
                     : Colors.black87,
               ),
             ),
             Text(
               subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
@@ -750,9 +856,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         hintText: hint,
         prefixIcon: Icon(icon),
         suffixIcon: suffixIcon,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -780,9 +884,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -796,10 +898,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
       items: items.map((item) {
-        return DropdownMenuItem(
-          value: item,
-          child: Text(item),
-        );
+        return DropdownMenuItem(value: item, child: Text(item));
       }).toList(),
       onChanged: onChanged,
     );

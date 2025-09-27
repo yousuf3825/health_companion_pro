@@ -7,12 +7,12 @@ import 'firebase_service.dart';
 class MockUserCredential implements UserCredential {
   @override
   final User user;
-  
+
   MockUserCredential(this.user);
-  
+
   @override
   AdditionalUserInfo? get additionalUserInfo => null;
-  
+
   @override
   AuthCredential? get credential => null;
 }
@@ -46,18 +46,28 @@ class AuthService {
       if (result.user != null) {
         // Create user profile in Firestore
         try {
+          print(
+            '🚀 Attempting to create Firebase profile for user: ${result.user!.uid}',
+          );
           await createUserProfile(
             userId: result.user!.uid,
             role: role,
-            userData: {
-              'email': email,
-              ...profileData,
-            },
+            userData: {'email': email, ...profileData},
           );
-          
-          print('User profile created in Firestore');
+
+          print('✅ User profile created in Firestore successfully');
         } catch (firestoreError) {
-          print('Firestore error: $firestoreError');
+          print('❌ Firestore error during profile creation: $firestoreError');
+          print('🔍 Error details: ${firestoreError.runtimeType}');
+
+          // Check if this is a permissions issue
+          if (firestoreError.toString().contains('permission') ||
+              firestoreError.toString().contains('PERMISSION_DENIED')) {
+            print(
+              '🚫 Firebase Security Rules might be blocking writes. Check your Firestore rules.',
+            );
+          }
+
           // Don't fail the entire registration if Firestore fails
           // The auth account is already created
         }
@@ -74,20 +84,24 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       print('Firebase Auth error: ${e.code} - ${e.message}');
       // Handle specific configuration errors
-      if (e.code == 'unknown' && e.message?.contains('CONFIGURATION_NOT_FOUND') == true) {
+      if (e.code == 'unknown' &&
+          e.message?.contains('CONFIGURATION_NOT_FOUND') == true) {
         throw FirebaseAuthException(
           code: 'configuration-error',
-          message: 'Firebase configuration issue. Please add SHA-1 fingerprint to Firebase Console.',
+          message:
+              'Firebase configuration issue. Please add SHA-1 fingerprint to Firebase Console.',
         );
       }
       rethrow;
     } catch (e) {
       print('Sign up error: $e');
       // Check if this is a PigeonUserDetails type error
-      if (e.toString().contains('PigeonUserDetails') || e.toString().contains('ListOfObject')) {
+      if (e.toString().contains('PigeonUserDetails') ||
+          e.toString().contains('ListOfObject')) {
         throw FirebaseAuthException(
           code: 'type-error',
-          message: 'Firebase plugin type error. Falling back to temporary registration.',
+          message:
+              'Firebase plugin type error. Falling back to temporary registration.',
         );
       }
       rethrow;
@@ -104,13 +118,13 @@ class AuthService {
     try {
       // Generate a temporary user ID
       String tempUserId = DateTime.now().millisecondsSinceEpoch.toString();
-      
+
       // Save user credentials for temporary login
       await _saveTempCredentials(email, password);
-      
+
       // Save user data locally for persistence
       await _saveUserDataLocally(tempUserId, role, profileData);
-      
+
       print('Temporary registration successful for $email');
       return true;
     } catch (e) {
@@ -126,12 +140,12 @@ class AuthService {
   }) async {
     try {
       print('Attempting temporary login for: $email');
-      
+
       // Check if temp credentials match
       Map<String, String?> tempCreds = await _getTempCredentials();
       if (tempCreds['email'] == email && tempCreds['password'] == password) {
         print('Temporary login credentials matched');
-        
+
         // Also check if we have local user data for this email
         Map<String, String?> localData = await loadUserDataLocally();
         if (localData.isNotEmpty && localData['userEmail'] == email) {
@@ -153,7 +167,10 @@ class AuthService {
   }
 
   // Save temporary credentials
-  static Future<void> _saveTempCredentials(String email, String password) async {
+  static Future<void> _saveTempCredentials(
+    String email,
+    String password,
+  ) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString('temp_email', email);
@@ -187,20 +204,28 @@ class AuthService {
       User? existingUser = _auth.currentUser;
       if (existingUser != null && existingUser.email == email) {
         print('User already authenticated: ${existingUser.uid}');
-        
+
         // Load and save user profile locally
         try {
-          Map<String, dynamic>? profile = await getUserProfile(existingUser.uid);
+          Map<String, dynamic>? profile = await getUserProfile(
+            existingUser.uid,
+          );
           if (profile != null) {
             print('User profile loaded from Firestore: ${profile['role']}');
-            await _saveUserDataLocally(existingUser.uid, profile['role'], profile);
+            await _saveUserDataLocally(
+              existingUser.uid,
+              profile['role'],
+              profile,
+            );
           } else {
-            print('No profile found in Firestore for existing user: ${existingUser.uid}');
+            print(
+              'No profile found in Firestore for existing user: ${existingUser.uid}',
+            );
           }
         } catch (profileError) {
           print('Error loading user profile for existing user: $profileError');
         }
-        
+
         // Return success since user is already authenticated
         return null; // Signal that auth succeeded but with type issues
       }
@@ -212,15 +237,23 @@ class AuthService {
 
       if (result.user != null) {
         print('Firebase sign-in successful for user: ${result.user!.uid}');
-        
+
         // Load and save user profile locally
         try {
-          Map<String, dynamic>? profile = await getUserProfile(result.user!.uid);
+          Map<String, dynamic>? profile = await getUserProfile(
+            result.user!.uid,
+          );
           if (profile != null) {
             print('User profile loaded from Firestore: ${profile['role']}');
-            await _saveUserDataLocally(result.user!.uid, profile['role'], profile);
+            await _saveUserDataLocally(
+              result.user!.uid,
+              profile['role'],
+              profile,
+            );
           } else {
-            print('No profile found in Firestore for user: ${result.user!.uid}');
+            print(
+              'No profile found in Firestore for user: ${result.user!.uid}',
+            );
           }
         } catch (profileError) {
           print('Error loading user profile: $profileError');
@@ -231,51 +264,57 @@ class AuthService {
       return result;
     } on FirebaseAuthException catch (e) {
       print('Firebase Auth error in signIn: ${e.code} - ${e.message}');
-      
+
       // Handle specific type errors
       if (e.message?.toLowerCase().contains('pigeonuserdetails') == true ||
           e.message?.toLowerCase().contains('listofobject') == true) {
         throw FirebaseAuthException(
           code: 'type-error',
-          message: 'Firebase plugin type error. Falling back to temporary login.',
+          message:
+              'Firebase plugin type error. Falling back to temporary login.',
         );
       }
-      
+
       rethrow;
     } catch (e) {
       print('General sign in error: $e');
-      
+
       // Check if this is a type casting error but user might be authenticated
-      if (e.toString().contains('PigeonUserDetails') || 
+      if (e.toString().contains('PigeonUserDetails') ||
           e.toString().contains('ListOfObject') ||
           (e.toString().contains('type') && e.toString().contains('cast'))) {
-        
         // Check if user got authenticated despite the error
         User? currentUser = _auth.currentUser;
         if (currentUser != null && currentUser.email == email) {
           print('User authenticated despite type error: ${currentUser.uid}');
-          
+
           // Load profile and return success using a simple approach
           try {
-            Map<String, dynamic>? profile = await getUserProfile(currentUser.uid);
+            Map<String, dynamic>? profile = await getUserProfile(
+              currentUser.uid,
+            );
             if (profile != null) {
-              await _saveUserDataLocally(currentUser.uid, profile['role'], profile);
+              await _saveUserDataLocally(
+                currentUser.uid,
+                profile['role'],
+                profile,
+              );
             }
           } catch (profileError) {
             print('Error loading profile after type error: $profileError');
           }
-          
+
           // Instead of creating a mock, just return null but the user is authenticated
           // The caller should check _auth.currentUser
           return null; // Signal that auth succeeded but UserCredential has issues
         }
-        
+
         throw FirebaseAuthException(
           code: 'type-error',
           message: 'Type casting error. Falling back to temporary login.',
         );
       }
-      
+
       rethrow;
     }
   }
@@ -289,9 +328,10 @@ class AuthService {
   }) async {
     try {
       // Use email from profileData if available, otherwise convert phone to email
-      String email = profileData['email'] ?? 
+      String email =
+          profileData['email'] ??
           (phoneNumber.replaceAll(RegExp(r'[^0-9]'), '') + '@medconnect.com');
-      
+
       return await signUpWithEmailAndPassword(
         email: email,
         password: password,
@@ -315,12 +355,10 @@ class AuthService {
   }) async {
     try {
       // Convert phone to email format for demo
-      String email = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '') + '@medconnect.com';
-      
-      return await signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      String email =
+          phoneNumber.replaceAll(RegExp(r'[^0-9]'), '') + '@medconnect.com';
+
+      return await signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
       print('Phone sign in error: $e');
       rethrow;
@@ -330,67 +368,101 @@ class AuthService {
   // Create user profile based on role
   static Future<void> createUserProfile({
     required String userId,
-    required String role, // 'doctor' or 'pharmacy'
+    required String role,
     required Map<String, dynamic> userData,
   }) async {
     try {
-      String collection = role == 'doctor' ? 'doctors' : 'pharmacies';
-      
-      // Safely extract phone number from various possible keys
-      String? phoneNumber = userData['phoneNumber'] as String? ?? 
-                           userData['phone'] as String? ?? 
-                           userData['phoneNo'] as String?;
-      
-      // Create role-specific document
-      Map<String, dynamic> roleSpecificData = {
-        'uid': userId,
-        'role': role,
-        'name': userData['name'] ?? '',
-        'email': userData['email'] ?? '',
-        'phoneNumber': phoneNumber ?? '',
-        'licenseNumber': userData['licenseNumber'] ?? '',
+      print('🚀 Starting createUserProfile for user: $userId, role: $role');
+
+      // Test Firebase connection first
+      FirebaseFirestore firestore = FirebaseFirestore.instance;
+      print('🔥 Firebase Firestore instance created');
+
+      // Add timestamp and user ID to profile data
+      final profileData = {
+        ...userData,
+        'userId': userId,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'isActive': true,
-        'isVerified': false, // Admin verification required
-      };
-      
-      // Add role-specific fields
-      if (role == 'doctor') {
-        roleSpecificData.addAll({
-          'specialty': userData['specialty'] ?? 'General Practitioner',
-          'qualification': userData['qualification'] ?? 'MBBS',
-          'experience': userData['experience'] ?? '1 year',
-          'hospital': userData['hospital'] ?? 'Not specified',
-        });
-      } else {
-        roleSpecificData.addAll({
-          'pharmacyName': userData['pharmacyName'] ?? userData['name'] ?? '',
-          'ownerName': userData['ownerName'] ?? userData['name'] ?? '',
-          'gstNumber': userData['gstNumber'] ?? 'Not specified',
-          'address': userData['address'] ?? 'Not specified',
-        });
-      }
-
-      await _firestore.collection(collection).doc(userId).set(roleSpecificData);
-
-      // Also create in users collection for easy lookup
-      Map<String, dynamic> userLookupData = {
-        'uid': userId,
-        'role': role,
-        'name': userData['name'] ?? '',
-        'email': userData['email'] ?? '',
-        'phoneNumber': phoneNumber ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
+        'isVerified': false,
         'isActive': true,
       };
 
-      await _firestore.collection('users').doc(userId).set(userLookupData);
-      
-      print('User profile created successfully for $userId');
+      print('💾 Profile data prepared: ${profileData.keys.toList()}');
+      // Create user document directly in doctors or pharmacies collection
+      // Expect role to be the exact collection name: 'doctors' or 'pharmacies'
+      String collectionPath = role;
+      print('📍 Target collection path: $collectionPath');
+
+      DocumentReference docRef = firestore
+          .collection(collectionPath)
+          .doc(userId);
+
+      await docRef.set(profileData);
+      print('✅ Document created at: ${docRef.path}');
+
+      // Verify the document was created (top-level collection only)
+      await _verifyDocumentCreation(userId, collectionPath);
+
+      print('🎉 User profile created successfully in $collectionPath!');
     } catch (e) {
-      print('Create user profile error: $e');
-      throw e;
+      print('❌ Error creating user profile: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      if (e is FirebaseException) {
+        print('❌ Firebase error code: ${e.code}');
+        print('❌ Firebase error message: ${e.message}');
+      }
+      rethrow;
+    }
+  }
+
+  // Update existing user profile document (merges with existing data)
+  static Future<void> updateUserProfileData({
+    required String userId,
+    required String role,
+    required Map<String, dynamic> additionalData,
+  }) async {
+    try {
+      print('🚀 Updating user profile in /$role collection');
+      print('📍 Target collection path: $role'); // Changed this line
+
+      FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+      // Add timestamp for update tracking
+      final updateData = {
+        ...additionalData,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Save directly to /{role} collection (e.g., /doctors/userId)
+      // Use set with merge to avoid failures if the document doesn't exist yet
+      await firestore
+          .collection(role)
+          .doc(userId)
+          .set(updateData, SetOptions(merge: true));
+
+      print('✅ Successfully updated profile in /$role/$userId');
+    } catch (e) {
+      print('❌ Error updating profile in /$role collection: $e');
+      rethrow;
+    }
+  }
+
+  // Verify that the document was actually created in Firebase
+  static Future<void> _verifyDocumentCreation(
+    String userId,
+    String role,
+  ) async {
+    try {
+      print('🔍 Verifying document creation for $userId...');
+      // role here should already be the collection name: 'doctors' or 'pharmacies'
+      final doc = await _firestore.collection(role).doc(userId).get();
+      print('✅ Verification: ($role/$userId) exists = ${doc.exists}');
+      if (!doc.exists) {
+        print('⚠️ Document not found at $role/$userId');
+      }
+    } catch (e) {
+      print('❌ Verification failed: $e');
     }
   }
 
@@ -398,49 +470,39 @@ class AuthService {
   static Future<Map<String, dynamic>?> getUserProfile(String userId) async {
     try {
       print('Fetching user profile for: $userId');
-      
-      // First check the users collection for role information
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(userId).get();
-      
-      if (userDoc.exists) {
-        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
-        String role = userData['role'] ?? 'doctor';
-        
-        print('User role found: $role');
-        
-        // Get detailed profile from role-specific collection
-        String collection = role == 'doctor' ? 'doctors' : 'pharmacies';
-        DocumentSnapshot profileDoc = await _firestore.collection(collection).doc(userId).get();
-        
-        if (profileDoc.exists) {
-          Map<String, dynamic> profileData = profileDoc.data() as Map<String, dynamic>;
-          print('Profile data retrieved successfully');
-          return profileData;
-        } else {
-          print('No profile document found in $collection collection');
-          // Return basic user data if detailed profile doesn't exist
-          return userData;
-        }
-      } else {
-        print('No user document found in users collection');
-        
-        // Try to find user in doctors collection
-        DocumentSnapshot doctorDoc = await _firestore.collection('doctors').doc(userId).get();
-        if (doctorDoc.exists) {
-          print('Found user in doctors collection');
-          return doctorDoc.data() as Map<String, dynamic>;
-        }
-        
-        // Try to find user in pharmacies collection
-        DocumentSnapshot pharmacyDoc = await _firestore.collection('pharmacies').doc(userId).get();
-        if (pharmacyDoc.exists) {
-          print('Found user in pharmacies collection');
-          return pharmacyDoc.data() as Map<String, dynamic>;
-        }
-        
-        print('User not found in any collection');
-        return null;
+
+      // Prefer top-level collections first (new structure)
+      DocumentSnapshot doctorDoc = await _firestore
+          .collection('doctors')
+          .doc(userId)
+          .get();
+      if (doctorDoc.exists) {
+        print('Found profile in /doctors');
+        return doctorDoc.data() as Map<String, dynamic>;
       }
+
+      DocumentSnapshot pharmacyDoc = await _firestore
+          .collection('pharmacies')
+          .doc(userId)
+          .get();
+      if (pharmacyDoc.exists) {
+        print('Found profile in /pharmacies');
+        return pharmacyDoc.data() as Map<String, dynamic>;
+      }
+
+      // Fallback: old users collection lookup (may not exist)
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        print('Found basic user doc in /users');
+        return userData;
+      }
+
+      print('User not found in any collection');
+      return null;
     } catch (e) {
       print('Get user profile error: $e');
       return null; // Return null instead of throwing to prevent login failures
@@ -448,21 +510,52 @@ class AuthService {
   }
 
   // Update user profile
-  static Future<void> updateUserProfile({
+  static Future<bool> updateUserProfile({
     required String userId,
     required String role,
     required Map<String, dynamic> updates,
   }) async {
     try {
-      String collection = role == 'doctor' ? 'doctors' : 'pharmacies';
-      
-      await _firestore.collection(collection).doc(userId).update({
+      // Add timestamp
+      Map<String, dynamic> updateData = {
         ...updates,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Update in new structure (users/doctors or users/pharmacies)
+      String roleCollection = role == 'doctor' ? 'doctors' : 'pharmacies';
+      await _firestore
+          .collection('users')
+          .doc(roleCollection)
+          .collection('profiles')
+          .doc(userId)
+          .update(updateData);
+
+      // Also update legacy structure for backward compatibility
+      String legacyCollection = role == 'doctor' ? 'doctors' : 'pharmacies';
+      await _firestore
+          .collection(legacyCollection)
+          .doc(userId)
+          .update(updateData);
+
+      // Update main user lookup if basic info changed
+      Map<String, dynamic> userUpdates = {};
+      if (updates.containsKey('name')) userUpdates['name'] = updates['name'];
+      if (updates.containsKey('email')) userUpdates['email'] = updates['email'];
+      if (updates.containsKey('phoneNumber'))
+        userUpdates['phoneNumber'] = updates['phoneNumber'];
+
+      if (userUpdates.isNotEmpty) {
+        await _firestore.collection('users').doc(userId).update(userUpdates);
+      }
+
+      print(
+        'User profile updated successfully in both new and legacy structures for $userId',
+      );
+      return true;
     } catch (e) {
       print('Update user profile error: $e');
-      throw e;
+      return false;
     }
   }
 
@@ -498,7 +591,10 @@ class AuthService {
       await prefs.setString('userRole', role);
       await prefs.setString('userName', profileData['name'] ?? '');
       if (role == 'pharmacy') {
-        await prefs.setString('pharmacyName', profileData['pharmacyName'] ?? profileData['name'] ?? '');
+        await prefs.setString(
+          'pharmacyName',
+          profileData['pharmacyName'] ?? profileData['name'] ?? '',
+        );
       }
       await prefs.setBool('isLoggedIn', true);
       await prefs.setString('userEmail', profileData['email'] ?? '');
@@ -513,7 +609,7 @@ class AuthService {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      
+
       if (!isLoggedIn) {
         return {};
       }
@@ -552,6 +648,40 @@ class AuthService {
     }
   }
 
+  // Helper method to get all doctors from Firebase
+  static Future<List<Map<String, dynamic>>> getAllDoctors() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('doctors')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data() as Map<String, dynamic>})
+          .toList();
+    } catch (e) {
+      print('Error fetching doctors: $e');
+      return [];
+    }
+  }
+
+  // Helper method to get all pharmacies from Firebase
+  static Future<List<Map<String, dynamic>>> getAllPharmacies() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('pharmacies')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data() as Map<String, dynamic>})
+          .toList();
+    } catch (e) {
+      print('Error fetching pharmacies: $e');
+      return [];
+    }
+  }
+
   // Reset password
   static Future<void> resetPassword(String email) async {
     try {
@@ -562,6 +692,35 @@ class AuthService {
     }
   }
 
+  // Test method to verify Firebase structure
+  static Future<void> testFirebaseStructure() async {
+    try {
+      print('Testing Firebase structure...');
+
+      // Test reading from top-level doctors
+      QuerySnapshot doctorsSnapshot = await _firestore
+          .collection('doctors')
+          .limit(1)
+          .get();
+      print(
+        'Doctors collection accessible: ${doctorsSnapshot.docs.isNotEmpty}',
+      );
+
+      // Test reading from top-level pharmacies
+      QuerySnapshot pharmaciesSnapshot = await _firestore
+          .collection('pharmacies')
+          .limit(1)
+          .get();
+      print(
+        'Pharmacies collection accessible: ${pharmaciesSnapshot.docs.isNotEmpty}',
+      );
+
+      print('Firebase structure test completed successfully');
+    } catch (e) {
+      print('Firebase structure test failed: $e');
+    }
+  }
+
   // Delete account
   static Future<void> deleteAccount() async {
     try {
@@ -569,7 +728,7 @@ class AuthService {
       if (user != null) {
         // Delete user data from Firestore
         await _firestore.collection('users').doc(user.uid).delete();
-        
+
         // Get user role and delete from role-specific collection
         Map<String, dynamic>? userData = await getUserProfile(user.uid);
         if (userData != null) {
@@ -577,13 +736,82 @@ class AuthService {
           String collection = role == 'doctor' ? 'doctors' : 'pharmacies';
           await _firestore.collection(collection).doc(user.uid).delete();
         }
-        
+
         // Delete auth account
         await user.delete();
       }
     } catch (e) {
       print('Delete account error: $e');
       throw e;
+    }
+  }
+
+  // TEMPORARY: Test method to create profile for existing user
+  static Future<void> testCreateProfileForCurrentUser() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      print('🧪 TESTING: Creating profile for existing user: ${user.uid}');
+      try {
+        await createUserProfile(
+          userId: user.uid,
+          role: 'doctor', // Test as doctor
+          userData: {
+            'email': user.email ?? 'test@example.com',
+            'name': 'Test Doctor',
+            'phoneNumber': '1234567890',
+            'licenseNumber': 'TEST123',
+            'specialty': 'General Practitioner',
+            'qualification': 'MBBS',
+          },
+        );
+        print('🎉 TEST: Profile creation completed!');
+      } catch (e) {
+        print('❌ TEST: Profile creation failed: $e');
+      }
+    } else {
+      print('❌ TEST: No current user found');
+    }
+  }
+
+  // AUTOMATIC: Simple Firebase write test
+  static Future<void> testFirebaseWriteCapability() async {
+    print('🔥 FIREBASE WRITE TEST: Starting simple write test...');
+    try {
+      // Test 1: Simple document write
+      await _firestore.collection('test').doc('write_test').set({
+        'message': 'Hello Firestore',
+        'timestamp': FieldValue.serverTimestamp(),
+        'test_type': 'write_capability_test',
+      });
+      print('✅ FIREBASE WRITE TEST: Simple write successful!');
+
+      // Test 2: Try to read it back
+      DocumentSnapshot doc = await _firestore
+          .collection('test')
+          .doc('write_test')
+          .get();
+      if (doc.exists) {
+        print('✅ FIREBASE READ TEST: Document exists and readable!');
+        print('📄 Document data: ${doc.data()}');
+      } else {
+        print('❌ FIREBASE READ TEST: Document not found after write!');
+      }
+
+      // Clean up
+      await _firestore.collection('test').doc('write_test').delete();
+      print('🧹 FIREBASE CLEANUP: Test document deleted');
+    } catch (e) {
+      print('❌ FIREBASE WRITE TEST FAILED: $e');
+      if (e.toString().contains('PERMISSION_DENIED')) {
+        print('🚫 FIREBASE SECURITY RULES: Write operations are blocked!');
+        print(
+          '🔧 SOLUTION: Update your Firestore security rules to allow writes',
+        );
+      } else if (e.toString().contains('network')) {
+        print('🌐 NETWORK ISSUE: Check internet connection');
+      } else {
+        print('🔍 UNKNOWN ERROR: ${e.runtimeType} - ${e.toString()}');
+      }
     }
   }
 }

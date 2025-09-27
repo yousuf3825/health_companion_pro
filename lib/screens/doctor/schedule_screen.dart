@@ -20,42 +20,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       status: AppointmentStatus.confirmed,
       phone: '+91 98765 43210',
     ),
-    Appointment(
-      id: '2',
-      patientName: 'Priya Sharma',
-      time: '10:30 AM',
-      duration: '30 min',
-      type: 'Follow-up',
-      status: AppointmentStatus.confirmed,
-      phone: '+91 98765 43211',
-    ),
-    Appointment(
-      id: '3',
-      patientName: 'Amit Singh',
-      time: '11:00 AM',
-      duration: '30 min',
-      type: 'General Consultation',
-      status: AppointmentStatus.pending,
-      phone: '+91 98765 43212',
-    ),
-    Appointment(
-      id: '4',
-      patientName: 'Sunita Patel',
-      time: '2:00 PM',
-      duration: '30 min',
-      type: 'Urgent Consultation',
-      status: AppointmentStatus.confirmed,
-      phone: '+91 98765 43213',
-    ),
-    Appointment(
-      id: '5',
-      patientName: 'Vikram Gupta',
-      time: '2:30 PM',
-      duration: '30 min',
-      type: 'General Consultation',
-      status: AppointmentStatus.completed,
-      phone: '+91 98765 43214',
-    ),
   ];
 
   @override
@@ -118,12 +82,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Expanded(
                   child: _StatCard(
                     title: 'Confirmed',
-                    count:
-                        _appointments
-                            .where(
-                              (a) => a.status == AppointmentStatus.confirmed,
-                            )
-                            .length,
+                    count: _appointments
+                        .where((a) => a.status == AppointmentStatus.confirmed)
+                        .length,
                     color: Colors.green,
                     icon: Icons.check_circle,
                   ),
@@ -132,10 +93,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Expanded(
                   child: _StatCard(
                     title: 'Pending',
-                    count:
-                        _appointments
-                            .where((a) => a.status == AppointmentStatus.pending)
-                            .length,
+                    count: _appointments
+                        .where((a) => a.status == AppointmentStatus.pending)
+                        .length,
                     color: Colors.orange,
                     icon: Icons.pending,
                   ),
@@ -146,169 +106,164 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
           // Appointments List
           Expanded(
-            child:
-                _appointments.isEmpty
-                    ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.event_available,
-                            size: 64,
-                            color: Colors.grey[400],
+            child: _appointments.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_available,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No appointments scheduled',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No appointments scheduled',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your schedule is free for today',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Your schedule is free for today',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _appointments.length,
-                      itemBuilder: (context, index) {
-                        final appointment = _appointments[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: CircleAvatar(
-                              backgroundColor: _getStatusColor(
-                                appointment.status,
-                              ).withOpacity(0.1),
-                              child: Icon(
-                                _getStatusIcon(appointment.status),
-                                color: _getStatusColor(appointment.status),
-                              ),
-                            ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    appointment.patientName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusColor(appointment.status),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    _getStatusText(appointment.status),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.access_time,
-                                      size: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${appointment.time} (${appointment.duration})',
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Icon(
-                                      Icons.medical_services,
-                                      size: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(child: Text(appointment.type)),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.phone,
-                                      size: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(appointment.phone),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            trailing: PopupMenuButton<String>(
-                              onSelected:
-                                  (value) => _handleAppointmentAction(
-                                    appointment,
-                                    value,
-                                  ),
-                              itemBuilder:
-                                  (context) => [
-                                    if (appointment.status !=
-                                        AppointmentStatus.completed)
-                                      const PopupMenuItem(
-                                        value: 'start',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.video_call),
-                                            SizedBox(width: 8),
-                                            Text('Start Call'),
-                                          ],
-                                        ),
-                                      ),
-                                    const PopupMenuItem(
-                                      value: 'reschedule',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.schedule),
-                                          SizedBox(width: 8),
-                                          Text('Reschedule'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'cancel',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.cancel),
-                                          SizedBox(width: 8),
-                                          Text('Cancel'),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                            ),
-                          ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _appointments.length,
+                    itemBuilder: (context, index) {
+                      final appointment = _appointments[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: CircleAvatar(
+                            backgroundColor: _getStatusColor(
+                              appointment.status,
+                            ).withOpacity(0.1),
+                            child: Icon(
+                              _getStatusIcon(appointment.status),
+                              color: _getStatusColor(appointment.status),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  appointment.patientName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _getStatusColor(appointment.status),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _getStatusText(appointment.status),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${appointment.time} (${appointment.duration})',
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Icon(
+                                    Icons.medical_services,
+                                    size: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(child: Text(appointment.type)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.phone,
+                                    size: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(appointment.phone),
+                                ],
+                              ),
+                            ],
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            onSelected: (value) =>
+                                _handleAppointmentAction(appointment, value),
+                            itemBuilder: (context) => [
+                              if (appointment.status !=
+                                  AppointmentStatus.completed)
+                                const PopupMenuItem(
+                                  value: 'start',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.video_call),
+                                      SizedBox(width: 8),
+                                      Text('Start Call'),
+                                    ],
+                                  ),
+                                ),
+                              const PopupMenuItem(
+                                value: 'reschedule',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.schedule),
+                                    SizedBox(width: 8),
+                                    Text('Reschedule'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'cancel',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.cancel),
+                                    SizedBox(width: 8),
+                                    Text('Cancel'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

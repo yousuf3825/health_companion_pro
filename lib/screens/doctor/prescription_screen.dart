@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PrescriptionScreen extends StatefulWidget {
   const PrescriptionScreen({super.key});
@@ -14,6 +16,7 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
   final _symptomsController = TextEditingController();
   final _diagnosisController = TextEditingController();
   final _adviceController = TextEditingController();
+  bool _isSaving = false;
 
   final List<Medicine> _medicines = [];
   final List<String> _commonMedicines = [
@@ -31,20 +34,6 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
   void initState() {
     super.initState();
     // Add some default medicines
-    _medicines.addAll([
-      Medicine(
-        name: 'Paracetamol 500mg',
-        dosage: '1-1-1',
-        duration: '5 days',
-        instructions: 'After food',
-      ),
-      Medicine(
-        name: 'Amoxicillin 250mg',
-        dosage: '1-0-1',
-        duration: '7 days',
-        instructions: 'Before food',
-      ),
-    ]);
   }
 
   @override
@@ -56,14 +45,23 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
         foregroundColor: Colors.white,
         actions: [
           TextButton(
-            onPressed: _sendPrescription,
-            child: const Text(
-              'Send',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            onPressed: _isSaving ? null : _savePrescriptionToFirebase,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'Save',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -255,10 +253,9 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
                                           Text(
                                             '${medicine.dosage} • ${medicine.duration}',
                                             style: TextStyle(
-                                              color:
-                                                  Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -322,11 +319,25 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _sendPrescription,
-                  icon: const Icon(Icons.send),
-                  label: const Text(
-                    'Send Prescription',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  onPressed: _isSaving ? null : _savePrescriptionToFirebase,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(
+                    _isSaving ? 'Saving...' : 'Save & Send Prescription',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
@@ -342,6 +353,174 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
         ),
       ),
     );
+  }
+
+  // Save the prescription under /doctors/{uid}/prescriptions/{autoId}
+  Future<void> _savePrescriptionToFirebase() async {
+    // Minimal validation: require at least one medicine and some clinical text
+    if (_medicines.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one medicine'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('No user is currently signed in');
+      }
+
+      final doctorId = user.uid;
+      final prescriptionsCol = FirebaseFirestore.instance
+          .collection('doctors')
+          .doc(doctorId)
+          .collection('prescriptions');
+
+      final newDoc = prescriptionsCol.doc();
+      final prescriptionId = newDoc.id;
+
+      // Build medicines array
+      final meds = _medicines
+          .map(
+            (m) => {
+              'name': m.name,
+              'dosage': m.dosage,
+              'duration': m.duration,
+              'instructions': m.instructions,
+            },
+          )
+          .toList();
+
+      // Build the document
+      final data = <String, dynamic>{
+        'prescriptionId': prescriptionId,
+        'doctorId': doctorId,
+
+        // Patient details (from this page)
+        'patientName': _patientNameController.text.trim(),
+        'patientAge': int.tryParse(_ageController.text.trim()) ?? 0,
+
+        // Clinical details
+        'symptoms': _symptomsController.text.trim(),
+        'diagnosis': _diagnosisController.text.trim(),
+        'advice': _adviceController.text.trim(),
+
+        // Medicines
+        'medicines': meds,
+
+        // Meta
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Persist to /doctors/{doctorId}/prescriptions/{prescriptionId}
+      await newDoc.set(data);
+      print(
+        '✅ Prescription saved to /doctors/$doctorId/prescriptions/$prescriptionId',
+      );
+
+      // Also mirror under /users/{docWithFullNamePatient3}/prescriptions/{prescriptionId}
+      try {
+        const targetFullName = 'Rajesh Kumar';
+        final usersQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('fullName', isEqualTo: targetFullName)
+            .limit(1)
+            .get();
+
+        if (usersQuery.docs.isNotEmpty) {
+          final patientDocId = usersQuery.docs.first.id;
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(patientDocId)
+              .collection('prescriptions')
+              .doc(prescriptionId)
+              .set({
+                ...data,
+                'mirroredFrom': 'doctors/$doctorId',
+                'mirroredAt': FieldValue.serverTimestamp(),
+              });
+          print(
+            '✅ Prescription mirrored to /users/'
+            '$patientDocId/prescriptions/$prescriptionId',
+          );
+        } else {
+          print(
+            '⚠️ No user document found with fullName == $targetFullName; skipping mirror',
+          );
+        }
+      } catch (mirrorError) {
+        // Do not block main flow if mirror fails
+        print('⚠️ Mirror save failed (query by fullName): $mirrorError');
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Prescription saved for ${_patientNameController.text}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Show success dialog with an option to go back
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 8),
+                Text('Prescription Saved'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Patient: ${_patientNameController.text}'),
+                const SizedBox(height: 6),
+                Text('ID: $prescriptionId'),
+                const SizedBox(height: 12),
+                const Text(
+                  'You can view this later in your prescriptions list.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving prescription: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   void _showAddMedicineDialog() {
@@ -364,53 +543,6 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
     setState(() {
       _medicines.removeAt(index);
     });
-  }
-
-  void _sendPrescription() {
-    if (_medicines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one medicine'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Prescription Sent'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 64),
-              const SizedBox(height: 16),
-              Text(
-                'Prescription sent to ${_patientNameController.text}',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Patient will receive SMS with prescription details and QR code',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                Navigator.of(context).pop(); // Go back to previous screen
-              },
-              child: const Text('Done'),
-            ),
-          ],
-        );
-      },
-    );
   }
 }
 
@@ -459,13 +591,9 @@ class _AddMedicineDialogState extends State<_AddMedicineDialog> {
                 labelText: 'Medicine Name',
                 border: OutlineInputBorder(),
               ),
-              items:
-                  widget.commonMedicines.map((medicine) {
-                    return DropdownMenuItem(
-                      value: medicine,
-                      child: Text(medicine),
-                    );
-                  }).toList(),
+              items: widget.commonMedicines.map((medicine) {
+                return DropdownMenuItem(value: medicine, child: Text(medicine));
+              }).toList(),
               onChanged: (value) {
                 setState(() {
                   _selectedMedicine = value;

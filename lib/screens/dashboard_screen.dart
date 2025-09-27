@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/debug_helper.dart';
+import '../services/auth_service.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -18,18 +19,31 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.bug_report),
             onPressed: () async {
+              print('🐛 DEBUG: Starting debug operations...');
+
+              // Test basic Firebase write capability first
+              print('🔥 Testing basic Firebase write capability...');
+              await AuthService.testFirebaseWriteCapability();
+
+              // Test Firebase profile creation with detailed logging
+              print('🧪 Testing Firebase profile creation...');
+              await AuthService.testCreateProfileForCurrentUser();
+
               await DebugHelper.checkUserDataConsistency();
               // Check if we need to create missing profile
               final appState = Provider.of<AppState>(context, listen: false);
-              if (appState.currentUserName == null && appState.currentPharmacyName == null) {
+              if (appState.currentUserName == null &&
+                  appState.currentPharmacyName == null) {
                 await DebugHelper.createMissingUserProfile(
-                  name: 'Pharmacy', 
+                  name: 'Pharmacy',
                   role: 'pharmacy',
                   pharmacyName: 'Pharmacy',
                 );
                 // Reinitialize user data
                 await appState.initializeUser();
               }
+
+              print('🐛 DEBUG: Debug operations completed');
             },
           ),
           IconButton(
@@ -53,7 +67,7 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 // Header with user info and stats
                 _buildHeader(context, appState),
-                
+
                 const SizedBox(height: 20),
 
                 // Main functionality cards
@@ -69,11 +83,9 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
-                      if (appState.isDoctor)
-                        _buildDoctorView(context),
-                      if (appState.isPharmacy)
-                        _buildPharmacyView(context),
+
+                      if (appState.isDoctor) _buildDoctorView(context),
+                      if (appState.isPharmacy) _buildPharmacyView(context),
                       if (appState.currentRole == null)
                         _buildWelcomeView(context),
 
@@ -103,10 +115,10 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context, AppState appState) {
     final isDoctor = appState.isDoctor;
-    final userName = isDoctor 
+    final userName = isDoctor
         ? appState.currentUserName ?? 'Doctor'
         : appState.currentPharmacyName ?? 'Pharmacy';
-    
+
     // Debug logging
     print('Dashboard - User Role: ${appState.currentRole}');
     print('Dashboard - User ID: ${appState.currentUserId}');
@@ -114,7 +126,7 @@ class DashboardScreen extends StatelessWidget {
     print('Dashboard - Pharmacy Name: ${appState.currentPharmacyName}');
     print('Dashboard - Is Doctor: $isDoctor');
     print('Dashboard - Display Name: $userName');
-    
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -177,12 +189,16 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            
+
             // Stats cards
             Row(
               children: [
                 if (isDoctor) ...[
-                  _buildStatCard('Today\'s\nAppointments', '8', Icons.calendar_today),
+                  _buildStatCard(
+                    'Today\'s\nAppointments',
+                    '8',
+                    Icons.calendar_today,
+                  ),
                   const SizedBox(width: 12),
                   _buildStatCard('Patients\nServed', '156', Icons.people),
                   const SizedBox(width: 12),
@@ -190,10 +206,18 @@ class DashboardScreen extends StatelessWidget {
                 ] else ...[
                   _buildStatCard('Orders\nToday', '12', Icons.shopping_bag),
                   const SizedBox(width: 12),
-                  _buildStatCard('Medicines\nDispensed', '89', Icons.medication),
+                  _buildStatCard(
+                    'Medicines\nDispensed',
+                    '89',
+                    Icons.medication,
+                  ),
                   const SizedBox(width: 12),
-                  _buildStatCard('Revenue\nToday', '₹5.2K', Icons.currency_rupee),
-                ]
+                  _buildStatCard(
+                    'Revenue\nToday',
+                    '₹5.2K',
+                    Icons.currency_rupee,
+                  ),
+                ],
               ],
             ),
           ],
@@ -388,9 +412,9 @@ class DashboardScreen extends StatelessWidget {
               Text(
                 'Please complete your profile setup to access all features',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -430,11 +454,7 @@ class DashboardScreen extends StatelessWidget {
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  size: 32,
-                  color: color,
-                ),
+                child: Icon(icon, size: 32, color: color),
               ),
               const SizedBox(height: 12),
               Text(
@@ -448,10 +468,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -465,7 +482,7 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _buildRecentActivity(BuildContext context, AppState appState) {
     final isDoctor = appState.isDoctor;
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -560,11 +577,7 @@ class DashboardScreen extends StatelessWidget {
               color: statusColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: statusColor,
-            ),
+            child: Icon(icon, size: 20, color: statusColor),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -580,19 +593,13 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 4,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: statusColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
