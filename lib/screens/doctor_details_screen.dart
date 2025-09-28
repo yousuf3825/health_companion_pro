@@ -25,7 +25,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final _additionalNotesController = TextEditingController();
 
   bool _isLoading = false;
-  String _selectedSpecialty = 'General Practitioner';
+  String _selectedSpecialty = 'General Physician';
   String _selectedQualification = 'MBBS';
 
   // Working hours
@@ -44,7 +44,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   };
 
   final List<String> _specialties = [
-    'General Practitioner',
+    'General Physician',
     'Cardiologist',
     'Dermatologist',
     'Pediatrician',

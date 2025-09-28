@@ -355,7 +355,7 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
     );
   }
 
-  // Save the prescription under /doctors/{uid}/prescriptions/{autoId}
+  // Save the prescription under /patients/{patientId}/prescriptions/{autoId}
   Future<void> _savePrescriptionToFirebase() async {
     // Minimal validation: require at least one medicine and some clinical text
     if (_medicines.isEmpty) {
@@ -377,13 +377,39 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
       }
 
       final doctorId = user.uid;
-      final prescriptionsCol = FirebaseFirestore.instance
-          .collection('doctors')
-          .doc(doctorId)
-          .collection('prescriptions');
+      final patientName = _patientNameController.text.trim();
+      
+      print('💊 Starting prescription save process...');
+      print('💊 Doctor ID: $doctorId');
+      print('💊 Patient Name: $patientName');
 
-      final newDoc = prescriptionsCol.doc();
-      final prescriptionId = newDoc.id;
+      // Find patient by fullName in /patients collection
+      final patientQuery = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('fullName', isEqualTo: patientName)
+          .limit(1)
+          .get();
+
+      if (patientQuery.docs.isEmpty) {
+        throw Exception('Patient "$patientName" not found in patients collection');
+      }
+
+      final patientDoc = patientQuery.docs.first;
+      final patientId = patientDoc.id;
+      final patientData = patientDoc.data();
+      
+      print('✅ Found patient: $patientId');
+      print('📋 Patient data: ${patientData['email']}, ${patientData['phoneNumber']}');
+
+      // Generate prescription ID
+      final prescriptionId = FirebaseFirestore.instance
+          .collection('patients')
+          .doc(patientId)
+          .collection('prescriptions')
+          .doc()
+          .id;
+
+      print('📝 Generated prescription ID: $prescriptionId');
 
       // Build medicines array
       final meds = _medicines
@@ -397,14 +423,20 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
           )
           .toList();
 
-      // Build the document
+      // Build the prescription document with patient info from Firebase
       final data = <String, dynamic>{
         'prescriptionId': prescriptionId,
         'doctorId': doctorId,
+        'patientId': patientId,
 
-        // Patient details (from this page)
-        'patientName': _patientNameController.text.trim(),
+        // Patient details from Firebase
+        'patientName': patientData['fullName'] ?? patientName,
+        'patientEmail': patientData['email'] ?? '',
+        'patientPhone': patientData['phoneNumber'] ?? '',
+        'patientAddress': patientData['address'] ?? '',
+        'patientGender': patientData['gender'] ?? '',
         'patientAge': int.tryParse(_ageController.text.trim()) ?? 0,
+        'patientDateOfBirth': patientData['dateOfBirth'],
 
         // Clinical details
         'symptoms': _symptomsController.text.trim(),
@@ -413,66 +445,67 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
 
         // Medicines
         'medicines': meds,
+        'totalMedicines': meds.length,
 
-        // Meta
+        // Prescription metadata
         'status': 'active',
+        'consultationDate': FieldValue.serverTimestamp(),
+        'validUntil': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
+        
+        // Generate a 6-digit share code
+        'shareCode': DateTime.now().millisecondsSinceEpoch.toString().substring(7, 13),
+
+        // Timestamps
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      // Persist to /doctors/{doctorId}/prescriptions/{prescriptionId}
-      await newDoc.set(data);
-      print(
-        '✅ Prescription saved to /doctors/$doctorId/prescriptions/$prescriptionId',
-      );
+      print('💾 Prescription data prepared with ${meds.length} medicines');
 
-      // Also mirror under /users/{docWithFullNamePatient3}/prescriptions/{prescriptionId}
+      // Save prescription under /patients/{patientId}/prescriptions/{prescriptionId}
+      await FirebaseFirestore.instance
+          .collection('patients')
+          .doc(patientId)
+          .collection('prescriptions')
+          .doc(prescriptionId)
+          .set(data);
+
+      print('✅ Prescription saved to /patients/$patientId/prescriptions/$prescriptionId');
+
+      // Optional: Also save a reference under doctor's collection for tracking
       try {
-        const targetFullName = 'Rajesh Kumar';
-        final usersQuery = await FirebaseFirestore.instance
-            .collection('users')
-            .where('fullName', isEqualTo: targetFullName)
-            .limit(1)
-            .get();
-
-        if (usersQuery.docs.isNotEmpty) {
-          final patientDocId = usersQuery.docs.first.id;
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(patientDocId)
-              .collection('prescriptions')
-              .doc(prescriptionId)
-              .set({
-                ...data,
-                'mirroredFrom': 'doctors/$doctorId',
-                'mirroredAt': FieldValue.serverTimestamp(),
-              });
-          print(
-            '✅ Prescription mirrored to /users/'
-            '$patientDocId/prescriptions/$prescriptionId',
-          );
-        } else {
-          print(
-            '⚠️ No user document found with fullName == $targetFullName; skipping mirror',
-          );
-        }
-      } catch (mirrorError) {
-        // Do not block main flow if mirror fails
-        print('⚠️ Mirror save failed (query by fullName): $mirrorError');
+        await FirebaseFirestore.instance
+            .collection('doctors')
+            .doc(doctorId)
+            .collection('prescriptions')
+            .doc(prescriptionId)
+            .set({
+              'prescriptionId': prescriptionId,
+              'patientId': patientId,
+              'patientName': patientName,
+              'patientLocation': '/patients/$patientId/prescriptions/$prescriptionId',
+              'medicines': meds,
+              'status': 'active',
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+        print('📋 Reference saved to doctor\'s collection');
+      } catch (refError) {
+        print('⚠️ Failed to save reference to doctor collection: $refError');
+        // Don't fail the main operation if reference save fails
       }
 
       if (!mounted) return;
+      
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Prescription saved for ${_patientNameController.text}',
-          ),
+          content: Text('Prescription saved for $patientName'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 2),
         ),
       );
 
-      // Show success dialog with an option to go back
+      // Show success dialog with details
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -489,12 +522,13 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Patient: ${_patientNameController.text}'),
-                const SizedBox(height: 6),
-                Text('ID: $prescriptionId'),
+                Text('Patient: $patientName'),
+                Text('Patient ID: $patientId'),
+                Text('Prescription ID: $prescriptionId'),
+                Text('Share Code: ${data['shareCode']}'),
                 const SizedBox(height: 12),
                 const Text(
-                  'You can view this later in your prescriptions list.',
+                  'Prescription has been saved to patient\'s collection and can be accessed by pharmacies.',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -511,11 +545,13 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
 
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
+      print('❌ Error saving prescription: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving prescription: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {

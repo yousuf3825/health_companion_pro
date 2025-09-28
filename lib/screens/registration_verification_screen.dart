@@ -26,7 +26,7 @@ class _RegistrationVerificationScreenState
   String? _selectedQualification;
 
   final List<String> _specialties = [
-    'General Practitioner',
+    'General Physician',
     'Pediatrician',
     'Cardiologist',
     'Dermatologist',
@@ -69,7 +69,7 @@ class _RegistrationVerificationScreenState
 
       if (isDoctor) {
         profileData.addAll({
-          'specialty': _selectedSpecialty ?? 'General Practitioner',
+          'specialty': _selectedSpecialty ?? 'General Physician',
           'qualification': _selectedQualification ?? 'MBBS',
           'experience': '5 years',
           'hospital': 'City General Hospital',

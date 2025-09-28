@@ -100,7 +100,7 @@ class DebugHelper {
         });
       } else {
         profileData.addAll({
-          'specialty': 'General Practitioner',
+          'specialty': 'General Physician',
           'qualification': 'MBBS',
           'experience': '1 year',
           'hospital': 'Not specified',

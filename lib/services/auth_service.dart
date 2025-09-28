@@ -760,7 +760,7 @@ class AuthService {
             'name': 'Test Doctor',
             'phoneNumber': '1234567890',
             'licenseNumber': 'TEST123',
-            'specialty': 'General Practitioner',
+            'specialty': 'General Physician',
             'qualification': 'MBBS',
           },
         );

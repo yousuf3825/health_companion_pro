@@ -33,7 +33,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _pharmacyNameController = TextEditingController();
 
   final List<String> _specialties = [
-    'General Practitioner',
+    'General Physician',
     'Pediatrician',
     'Cardiologist',
     'Dermatologist',
@@ -115,7 +115,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (isDoctor) {
         profileData.addAll({
-          'specialty': _selectedSpecialty ?? 'General Practitioner',
+          'specialty': _selectedSpecialty ?? 'General Physician',
           'qualification': _selectedQualification ?? 'MBBS',
           'experience': '1 year',
           'hospital': 'Not specified',
