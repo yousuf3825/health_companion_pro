@@ -378,7 +378,7 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
 
       final doctorId = user.uid;
       final patientName = _patientNameController.text.trim();
-      
+
       print('💊 Starting prescription save process...');
       print('💊 Doctor ID: $doctorId');
       print('💊 Patient Name: $patientName');
@@ -391,15 +391,19 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
           .get();
 
       if (patientQuery.docs.isEmpty) {
-        throw Exception('Patient "$patientName" not found in patients collection');
+        throw Exception(
+          'Patient "$patientName" not found in patients collection',
+        );
       }
 
       final patientDoc = patientQuery.docs.first;
       final patientId = patientDoc.id;
       final patientData = patientDoc.data();
-      
+
       print('✅ Found patient: $patientId');
-      print('📋 Patient data: ${patientData['email']}, ${patientData['phoneNumber']}');
+      print(
+        '📋 Patient data: ${patientData['email']}, ${patientData['phoneNumber']}',
+      );
 
       // Generate prescription ID
       final prescriptionId = FirebaseFirestore.instance
@@ -450,10 +454,15 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
         // Prescription metadata
         'status': 'active',
         'consultationDate': FieldValue.serverTimestamp(),
-        'validUntil': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
-        
+        'validUntil': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 30)),
+        ),
+
         // Generate a 6-digit share code
-        'shareCode': DateTime.now().millisecondsSinceEpoch.toString().substring(7, 13),
+        'shareCode': DateTime.now().millisecondsSinceEpoch.toString().substring(
+          7,
+          13,
+        ),
 
         // Timestamps
         'createdAt': FieldValue.serverTimestamp(),
@@ -470,7 +479,9 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
           .doc(prescriptionId)
           .set(data);
 
-      print('✅ Prescription saved to /patients/$patientId/prescriptions/$prescriptionId');
+      print(
+        '✅ Prescription saved to /patients/$patientId/prescriptions/$prescriptionId',
+      );
 
       // Optional: Also save a reference under doctor's collection for tracking
       try {
@@ -483,7 +494,8 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
               'prescriptionId': prescriptionId,
               'patientId': patientId,
               'patientName': patientName,
-              'patientLocation': '/patients/$patientId/prescriptions/$prescriptionId',
+              'patientLocation':
+                  '/patients/$patientId/prescriptions/$prescriptionId',
               'medicines': meds,
               'status': 'active',
               'createdAt': FieldValue.serverTimestamp(),
@@ -495,7 +507,7 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
       }
 
       if (!mounted) return;
-      
+
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
