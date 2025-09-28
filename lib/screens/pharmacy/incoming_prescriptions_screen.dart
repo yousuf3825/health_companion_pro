@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class IncomingPrescriptionsScreen extends StatefulWidget {
   const IncomingPrescriptionsScreen({super.key});
@@ -10,105 +12,135 @@ class IncomingPrescriptionsScreen extends StatefulWidget {
 
 class _IncomingPrescriptionsScreenState
     extends State<IncomingPrescriptionsScreen> {
-  final List<PrescriptionOrder> _prescriptions = [
-    PrescriptionOrder(
-      id: 'RX001',
-      patientName: 'Rajesh Kumar',
-      doctorName: 'Dr. Smith',
-      prescribedDate: DateTime.now().subtract(const Duration(hours: 2)),
-      medicines: [
-        PrescribedMedicine(
-          name: 'Paracetamol 500mg',
-          dosage: '1-1-1',
-          duration: '5 days',
-          available: true,
+  List<PrescriptionOrder> _prescriptions = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    print('💊 Incoming Prescriptions: Screen initialized');
+    _fetchPrescriptions();
+  }
+
+  Future<void> _fetchPrescriptions() async {
+    print('📥 Starting to fetch prescriptions from Firebase...');
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('No user signed in');
+      }
+
+      final pharmacyId = user.uid;
+      print('🏪 Pharmacy ID: $pharmacyId');
+
+      // Fetch orders from /pharmacies/{pharmacyId}/orders
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('pharmacies')
+          .doc(pharmacyId)
+          .collection('orders')
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      print('📋 Found ${querySnapshot.docs.length} orders');
+
+      final List<PrescriptionOrder> fetchedPrescriptions = [];
+
+      for (var doc in querySnapshot.docs) {
+        try {
+          final data = doc.data();
+          print('📄 Processing order: ${doc.id}');
+
+          final prescriptionOrder = PrescriptionOrder.fromFirestore(
+            doc.id,
+            data,
+          );
+
+          fetchedPrescriptions.add(prescriptionOrder);
+          print(
+            '✅ Added prescription: ${prescriptionOrder.orderId} for ${prescriptionOrder.patientName}',
+          );
+        } catch (e) {
+          print('⚠️ Error processing document ${doc.id}: $e');
+        }
+      }
+
+      setState(() {
+        _prescriptions = fetchedPrescriptions;
+        _loading = false;
+      });
+
+      print(
+        '✅ Successfully loaded ${fetchedPrescriptions.length} prescriptions',
+      );
+    } catch (e) {
+      print('❌ Error fetching prescriptions: $e');
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _updatePrescriptionStatus(String orderId, String status) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      print('📝 Updating prescription $orderId to status: $status');
+
+      await FirebaseFirestore.instance
+          .collection('pharmacies')
+          .doc(user.uid)
+          .collection('orders')
+          .doc(orderId)
+          .update({
+            'status': status,
+            'updatedAt': FieldValue.serverTimestamp(),
+            if (status == 'accepted')
+              'acceptedAt': FieldValue.serverTimestamp(),
+            if (status == 'declined')
+              'declinedAt': FieldValue.serverTimestamp(),
+          });
+
+      print('✅ Status updated successfully');
+
+      // Refresh the prescriptions list
+      await _fetchPrescriptions();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Prescription ${status == 'accepted' ? 'accepted' : 'declined'} successfully',
+          ),
+          backgroundColor: status == 'accepted' ? Colors.green : Colors.orange,
         ),
-        PrescribedMedicine(
-          name: 'Amoxicillin 250mg',
-          dosage: '1-0-1',
-          duration: '7 days',
-          available: true,
+      );
+    } catch (e) {
+      print('❌ Error updating status: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating prescription: $e'),
+          backgroundColor: Colors.red,
         ),
-      ],
-      status: PrescriptionStatus.pending,
-      priority: PrescriptionPriority.normal,
-    ),
-    PrescriptionOrder(
-      id: 'RX002',
-      patientName: 'Priya Sharma',
-      doctorName: 'Dr. Johnson',
-      prescribedDate: DateTime.now().subtract(const Duration(hours: 4)),
-      medicines: [
-        PrescribedMedicine(
-          name: 'Ibuprofen 400mg',
-          dosage: '1-0-1',
-          duration: '3 days',
-          available: false,
-        ),
-        PrescribedMedicine(
-          name: 'Cough Syrup',
-          dosage: '5ml TID',
-          duration: '5 days',
-          available: true,
-        ),
-        PrescribedMedicine(
-          name: 'Vitamin D3',
-          dosage: '1-0-0',
-          duration: '30 days',
-          available: true,
-        ),
-      ],
-      status: PrescriptionStatus.processing,
-      priority: PrescriptionPriority.urgent,
-    ),
-    PrescriptionOrder(
-      id: 'RX003',
-      patientName: 'Amit Singh',
-      doctorName: 'Dr. Brown',
-      prescribedDate: DateTime.now().subtract(const Duration(hours: 6)),
-      medicines: [
-        PrescribedMedicine(
-          name: 'Omeprazole 20mg',
-          dosage: '1-0-0',
-          duration: '14 days',
-          available: true,
-        ),
-        PrescribedMedicine(
-          name: 'Iron Tablets',
-          dosage: '0-0-1',
-          duration: '30 days',
-          available: true,
-        ),
-      ],
-      status: PrescriptionStatus.ready,
-      priority: PrescriptionPriority.normal,
-    ),
-    PrescriptionOrder(
-      id: 'RX004',
-      patientName: 'Sunita Patel',
-      doctorName: 'Dr. Davis',
-      prescribedDate: DateTime.now().subtract(const Duration(days: 1)),
-      medicines: [
-        PrescribedMedicine(
-          name: 'Calcium Tablets',
-          dosage: '1-0-1',
-          duration: '30 days',
-          available: true,
-        ),
-      ],
-      status: PrescriptionStatus.dispensed,
-      priority: PrescriptionPriority.normal,
-    ),
-  ];
+      );
+    }
+  }
 
   PrescriptionStatus? _selectedFilter;
 
   @override
   Widget build(BuildContext context) {
-    final filteredPrescriptions =
-        _selectedFilter == null
-            ? _prescriptions
-            : _prescriptions.where((p) => p.status == _selectedFilter).toList();
+    final filteredPrescriptions = _selectedFilter == null
+        ? _prescriptions
+        : _prescriptions.where((p) => p.status == _selectedFilter).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -116,6 +148,10 @@ class _IncomingPrescriptionsScreenState
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchPrescriptions,
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterDialog,
@@ -133,12 +169,9 @@ class _IncomingPrescriptionsScreenState
                 Expanded(
                   child: _StatCard(
                     title: 'Pending',
-                    count:
-                        _prescriptions
-                            .where(
-                              (p) => p.status == PrescriptionStatus.pending,
-                            )
-                            .length,
+                    count: _prescriptions
+                        .where((p) => p.status == PrescriptionStatus.pending)
+                        .length,
                     color: Colors.orange,
                     icon: Icons.pending_actions,
                   ),
@@ -147,12 +180,9 @@ class _IncomingPrescriptionsScreenState
                 Expanded(
                   child: _StatCard(
                     title: 'Processing',
-                    count:
-                        _prescriptions
-                            .where(
-                              (p) => p.status == PrescriptionStatus.processing,
-                            )
-                            .length,
+                    count: _prescriptions
+                        .where((p) => p.status == PrescriptionStatus.processing)
+                        .length,
                     color: Colors.blue,
                     icon: Icons.refresh,
                   ),
@@ -161,10 +191,9 @@ class _IncomingPrescriptionsScreenState
                 Expanded(
                   child: _StatCard(
                     title: 'Ready',
-                    count:
-                        _prescriptions
-                            .where((p) => p.status == PrescriptionStatus.ready)
-                            .length,
+                    count: _prescriptions
+                        .where((p) => p.status == PrescriptionStatus.ready)
+                        .length,
                     color: Colors.green,
                     icon: Icons.check_circle,
                   ),
@@ -194,31 +223,69 @@ class _IncomingPrescriptionsScreenState
 
           // Prescriptions List
           Expanded(
-            child:
-                filteredPrescriptions.isEmpty
-                    ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.receipt_long_outlined,
-                            size: 64,
-                            color: Colors.grey[400],
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red[300],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading prescriptions',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.red[600],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _selectedFilter == null
-                                ? 'No prescriptions available'
-                                : 'No ${_getStatusText(_selectedFilter!).toLowerCase()} prescriptions',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _error!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
                           ),
-                        ],
-                      ),
-                    )
-                    : ListView.builder(
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _fetchPrescriptions,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : filteredPrescriptions.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _selectedFilter == null
+                              ? 'No prescriptions available'
+                              : 'No ${_getStatusText(_selectedFilter!).toLowerCase()} prescriptions',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _fetchPrescriptions,
+                    child: ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: filteredPrescriptions.length,
                       itemBuilder: (context, index) {
@@ -261,7 +328,7 @@ class _IncomingPrescriptionsScreenState
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        prescription.id,
+                                        prescription.orderId,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
@@ -362,10 +429,10 @@ class _IncomingPrescriptionsScreenState
                                       size: 14,
                                       color:
                                           prescription.medicines.every(
-                                                (m) => m.available,
-                                              )
-                                              ? Colors.green
-                                              : Colors.orange,
+                                            (m) => m.available,
+                                          )
+                                          ? Colors.green
+                                          : Colors.orange,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
@@ -377,10 +444,10 @@ class _IncomingPrescriptionsScreenState
                                       style: TextStyle(
                                         color:
                                             prescription.medicines.every(
-                                                  (m) => m.available,
-                                                )
-                                                ? Colors.green
-                                                : Colors.orange,
+                                              (m) => m.available,
+                                            )
+                                            ? Colors.green
+                                            : Colors.orange,
                                       ),
                                     ),
                                   ],
@@ -395,11 +462,12 @@ class _IncomingPrescriptionsScreenState
                                   children: [
                                     Text(
                                       'Prescribed Medicines:',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
                                     const SizedBox(height: 12),
                                     ...prescription.medicines.map(
@@ -409,18 +477,16 @@ class _IncomingPrescriptionsScreenState
                                         ),
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color:
-                                              medicine.available
-                                                  ? Colors.green[50]
-                                                  : Colors.red[50],
+                                          color: medicine.available
+                                              ? Colors.green[50]
+                                              : Colors.red[50],
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color:
-                                                medicine.available
-                                                    ? Colors.green[200]!
-                                                    : Colors.red[200]!,
+                                            color: medicine.available
+                                                ? Colors.green[200]!
+                                                : Colors.red[200]!,
                                           ),
                                         ),
                                         child: Row(
@@ -429,10 +495,9 @@ class _IncomingPrescriptionsScreenState
                                               medicine.available
                                                   ? Icons.check_circle
                                                   : Icons.cancel,
-                                              color:
-                                                  medicine.available
-                                                      ? Colors.green
-                                                      : Colors.red,
+                                              color: medicine.available
+                                                  ? Colors.green
+                                                  : Colors.red,
                                               size: 20,
                                             ),
                                             const SizedBox(width: 12),
@@ -483,40 +548,52 @@ class _IncomingPrescriptionsScreenState
                                     Row(
                                       children: [
                                         if (prescription.status ==
-                                            PrescriptionStatus.pending)
+                                            PrescriptionStatus.pending) ...[
                                           Expanded(
                                             child: ElevatedButton.icon(
-                                              onPressed:
-                                                  () => _updateStatus(
-                                                    prescription,
-                                                    PrescriptionStatus
-                                                        .processing,
+                                              onPressed: () =>
+                                                  _updatePrescriptionStatus(
+                                                    prescription.orderId,
+                                                    'declined',
                                                   ),
-                                              icon: const Icon(
-                                                Icons.play_arrow,
-                                              ),
-                                              label: const Text(
-                                                'Start Processing',
-                                              ),
+                                              icon: const Icon(Icons.close),
+                                              label: const Text('Decline'),
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.blue,
+                                                backgroundColor: Colors.orange,
                                                 foregroundColor: Colors.white,
                                               ),
                                             ),
                                           ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: ElevatedButton.icon(
+                                              onPressed: () =>
+                                                  _updatePrescriptionStatus(
+                                                    prescription.orderId,
+                                                    'accepted',
+                                                  ),
+                                              icon: const Icon(Icons.check),
+                                              label: const Text('Accept'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         if (prescription.status ==
                                             PrescriptionStatus.processing) ...[
                                           Expanded(
                                             child: ElevatedButton.icon(
-                                              onPressed:
-                                                  () => _updateStatus(
-                                                    prescription,
-                                                    PrescriptionStatus.ready,
+                                              onPressed: () =>
+                                                  _updatePrescriptionStatus(
+                                                    prescription.orderId,
+                                                    'ready',
                                                   ),
                                               icon: const Icon(Icons.done),
                                               label: const Text('Mark Ready'),
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.green,
+                                                backgroundColor: Colors.blue,
                                                 foregroundColor: Colors.white,
                                               ),
                                             ),
@@ -526,12 +603,10 @@ class _IncomingPrescriptionsScreenState
                                             PrescriptionStatus.ready) ...[
                                           Expanded(
                                             child: ElevatedButton.icon(
-                                              onPressed:
-                                                  () => _updateStatus(
-                                                    prescription,
-                                                    PrescriptionStatus
-                                                        .dispensed,
-                                                  ),
+                                              onPressed: () => _updateStatus(
+                                                prescription,
+                                                PrescriptionStatus.dispensed,
+                                              ),
                                               icon: const Icon(
                                                 Icons.local_shipping,
                                               ),
@@ -539,10 +614,9 @@ class _IncomingPrescriptionsScreenState
                                                 'Mark Dispensed',
                                               ),
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor:
-                                                    Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
+                                                backgroundColor: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
                                                 foregroundColor: Colors.white,
                                               ),
                                             ),
@@ -558,6 +632,7 @@ class _IncomingPrescriptionsScreenState
                         );
                       },
                     ),
+                  ),
           ),
         ],
       ),
@@ -572,18 +647,17 @@ class _IncomingPrescriptionsScreenState
           title: const Text('Filter Prescriptions'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children:
-                PrescriptionStatus.values.map((status) {
-                  return ListTile(
-                    title: Text(_getStatusText(status)),
-                    onTap: () {
-                      setState(() {
-                        _selectedFilter = status;
-                      });
-                      Navigator.of(context).pop();
-                    },
-                  );
-                }).toList(),
+            children: PrescriptionStatus.values.map((status) {
+              return ListTile(
+                title: Text(_getStatusText(status)),
+                onTap: () {
+                  setState(() {
+                    _selectedFilter = status;
+                  });
+                  Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
           ),
           actions: [
             TextButton(
@@ -616,7 +690,7 @@ class _IncomingPrescriptionsScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${prescription.id} status updated to ${_getStatusText(newStatus)}',
+          '${prescription.orderId} status updated to ${_getStatusText(newStatus)}',
         ),
         backgroundColor: Colors.green,
       ),
@@ -646,6 +720,8 @@ class _IncomingPrescriptionsScreenState
         return Colors.green;
       case PrescriptionStatus.dispensed:
         return Colors.grey;
+      case PrescriptionStatus.declined:
+        return Colors.red;
     }
   }
 
@@ -659,6 +735,8 @@ class _IncomingPrescriptionsScreenState
         return Icons.check_circle;
       case PrescriptionStatus.dispensed:
         return Icons.local_shipping;
+      case PrescriptionStatus.declined:
+        return Icons.cancel;
     }
   }
 
@@ -672,6 +750,8 @@ class _IncomingPrescriptionsScreenState
         return 'Ready';
       case PrescriptionStatus.dispensed:
         return 'Dispensed';
+      case PrescriptionStatus.declined:
+        return 'Declined';
     }
   }
 }
@@ -717,28 +797,104 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-enum PrescriptionStatus { pending, processing, ready, dispensed }
+enum PrescriptionStatus { pending, processing, ready, dispensed, declined }
 
 enum PrescriptionPriority { normal, urgent }
 
 class PrescriptionOrder {
-  final String id;
+  final String orderId;
   final String patientName;
+  final String patientAge;
+  final String patientGender;
+  final String patientPhone;
+  final String patientAddress;
   final String doctorName;
+  final String clinic;
+  final String diagnosis;
+  final String chiefComplaint;
+  final String allergies;
+  final String vitalSigns;
+  final String investigation;
   final DateTime prescribedDate;
   final List<PrescribedMedicine> medicines;
   PrescriptionStatus status;
   final PrescriptionPriority priority;
 
   PrescriptionOrder({
-    required this.id,
+    required this.orderId,
     required this.patientName,
+    required this.patientAge,
+    required this.patientGender,
+    required this.patientPhone,
+    required this.patientAddress,
     required this.doctorName,
+    required this.clinic,
+    required this.diagnosis,
+    required this.chiefComplaint,
+    required this.allergies,
+    required this.vitalSigns,
+    required this.investigation,
     required this.prescribedDate,
     required this.medicines,
     required this.status,
     required this.priority,
   });
+
+  factory PrescriptionOrder.fromFirestore(
+    String docId,
+    Map<String, dynamic> data,
+  ) {
+    return PrescriptionOrder(
+      orderId: docId,
+      patientName: data['patientName'] ?? '',
+      patientAge: data['patientAge'] ?? '',
+      patientGender: data['patientGender'] ?? '',
+      patientPhone: data['patientPhone'] ?? '',
+      patientAddress: data['patientAddress'] ?? '',
+      doctorName: data['doctorName'] ?? '',
+      clinic: data['clinic'] ?? '',
+      diagnosis: data['diagnosis'] ?? '',
+      chiefComplaint: data['chiefComplaint'] ?? '',
+      allergies: data['allergies'] ?? '',
+      vitalSigns: data['vitalSigns'] ?? '',
+      investigation: data['investigation'] ?? '',
+      prescribedDate:
+          (data['prescribedDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      medicines:
+          (data['medicines'] as List<dynamic>?)
+              ?.map(
+                (medicine) => PrescribedMedicine(
+                  name: medicine['name'] ?? '',
+                  dosage: medicine['dosage'] ?? '',
+                  duration: medicine['duration'] ?? '',
+                  available: medicine['available'] ?? true,
+                ),
+              )
+              .toList() ??
+          [],
+      status: _parseStatus(data['status']),
+      priority: data['priority'] == 'urgent'
+          ? PrescriptionPriority.urgent
+          : PrescriptionPriority.normal,
+    );
+  }
+
+  static PrescriptionStatus _parseStatus(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'pending':
+        return PrescriptionStatus.pending;
+      case 'processing':
+        return PrescriptionStatus.processing;
+      case 'ready':
+        return PrescriptionStatus.ready;
+      case 'dispensed':
+        return PrescriptionStatus.dispensed;
+      case 'declined':
+        return PrescriptionStatus.declined;
+      default:
+        return PrescriptionStatus.pending;
+    }
+  }
 }
 
 class PrescribedMedicine {
